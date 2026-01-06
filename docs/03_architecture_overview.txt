@@ -1,0 +1,34 @@
+ARCHITECTURE OVERVIEW
+
+Visão geral
+A arquitetura é composta por:
+- App Flutter
+- Camada de estado local
+- Motor de sincronização
+- Backend Supabase
+
+App Flutter
+Responsável por UX e estado imediato.
+Nunca fala diretamente com o backend.
+
+Camada local
+Armazena eventos localmente.
+Permite leitura e escrita offline.
+É otimizada para consultas rápidas.
+
+Motor de sincronização
+Envia eventos locais para o backend.
+Recebe eventos remotos.
+Resolve conflitos simples.
+Garante idempotência.
+
+Backend Supabase
+Responsável por autenticação.
+Persistência final dos dados.
+Partilha entre cuidadores.
+Segurança, RLS e auditoria.
+
+Separação de responsabilidades
+O backend não calcula estados complexos.
+A app não decide permissões.
+O sync não contém lógica de UX.

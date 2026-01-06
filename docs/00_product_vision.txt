@@ -1,0 +1,35 @@
+PRODUCT VISION
+
+Contexto
+Pais de bebés vivem com sono fragmentado, privação de sono e elevado stress.
+Registos são feitos frequentemente durante a noite, com uma mão e pouca atenção.
+Erros humanos são normais e esperados.
+
+Problema
+Pais precisam de registar e consultar o sono do bebé de forma rápida, confiável e sem fricção.
+A coordenação entre múltiplos cuidadores é crítica para evitar duplicações e confusão.
+
+Público-alvo
+Pais e cuidadores de bebés entre 0 e 24 meses.
+Famílias com múltiplos cuidadores e múltiplos dispositivos.
+
+Proposta de valor
+- Registo de sono em 1–2 toques.
+- Estado atual do sono sempre claro.
+- Resumos simples: hoje, últimas 24h, últimos 7 dias.
+- Confiança nos dados, mesmo com erros humanos.
+
+Foco inicial
+O MVP foca-se exclusivamente no tracking manual de sono.
+Inclui criação de bebé, gestão de cuidadores, início e fim de sono, timeline e resumos.
+Offline-first é obrigatório.
+
+Evolução futura
+Após o sono estar sólido, o produto evolui para um hub de acompanhamento do bebé.
+Módulos futuros incluem milestones, diário, dicas de exercícios e alimentação.
+Todos os módulos reutilizam o mesmo modelo de bebé, cuidadores, permissões e auditoria.
+
+O que o produto não é
+- Não é uma rede social.
+- Não é uma aplicação médica.
+- Não tenta prever ou corrigir o comportamento do bebé.

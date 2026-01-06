@@ -1,0 +1,49 @@
+DOMAIN MODEL
+
+Princípio base
+O sistema é centrado no bebé, não no utilizador.
+Utilizadores existem apenas como cuidadores de um ou mais bebés.
+
+Entidades conceptuais principais
+- Baby
+- Caregiver
+- Event
+- Module
+
+Baby
+Representa uma criança real.
+É o agregador principal de todos os dados (sono, milestones, diário, dicas).
+Tem múltiplos cuidadores.
+Não pertence a um único utilizador.
+
+Caregiver
+Representa a relação entre um utilizador autenticado e um bebé.
+Define permissões (ex: owner, editor, viewer).
+É usado para autoria e auditoria.
+
+Event
+Representa um acontecimento registado no tempo.
+É a unidade base de dados do sistema.
+Eventos podem ser imprecisos ou corrigidos posteriormente.
+
+Eventos de sono
+- SleepStart
+- SleepEnd
+Cada evento tem timestamp, cuidador e origem.
+
+Sessão de sono
+Não é uma entidade persistida.
+É derivada da sequência de eventos.
+Pode estar temporariamente inconsistente.
+
+Correções
+Correções são sempre novos eventos.
+O histórico nunca é apagado silenciosamente.
+
+Conflitos
+Conflitos são esperados (ex: dois cuidadores iniciam sono).
+O sistema deve permitir múltiplos eventos e resolvê-los por regras simples.
+
+Extensibilidade
+Sono é apenas um tipo de evento.
+Milestones e outros módulos seguem o mesmo padrão.

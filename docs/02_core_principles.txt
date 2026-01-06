@@ -1,0 +1,35 @@
+CORE PRINCIPLES
+
+Offline-first
+A aplicação deve funcionar completamente sem internet.
+Nenhuma ação do utilizador pode ser bloqueada por ausência de rede.
+
+Fonte de verdade
+O estado local é a fonte de verdade imediata.
+O backend serve para sincronização e partilha.
+
+Eventos em vez de estados
+O sistema regista acontecimentos, não estados finais.
+Estados são sempre derivados.
+
+Erro humano é normal
+O sistema assume erros e imprecisão.
+A UX deve permitir correções simples.
+
+Simplicidade noturna
+Durante a noite:
+- Poucos toques
+- Poucas decisões
+- Pouca informação
+
+Multi-cuidador por defeito
+Todas as decisões assumem múltiplos cuidadores.
+A autoria das ações é sempre visível.
+
+Resolução de conflitos
+Last-write-wins com metadata.
+A resolução deve ser previsível e auditável.
+
+Evolução modular
+Novos módulos não alteram o core.
+O modelo base mantém-se estável.

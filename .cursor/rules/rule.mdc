@@ -1,0 +1,15 @@
+---
+alwaysApply: true
+---
+Este projeto é uma app mobile Flutter com backend Supabase.
+O domínio é tracking parental (bebés), com dados sensíveis.
+
+Regras obrigatórias:
+- Offline-first é um requisito não negociável.
+- O sistema é centrado no bebé, não no utilizador.
+- O modelo é baseado em eventos, não em estados finais.
+- Multi-bebé e multi-cuidador são assumidos desde o início.
+- A fonte de verdade do domínio está nos ficheiros /docs/*.txt. e nos ficheiros *.md
+- Não assumir decisões fora do que está documentado nesses ficheiros.
+
+Qualquer decisão técnica deve respeitar estes princípios.

@@ -1,0 +1,30 @@
+UX GUIDELINES
+
+Contexto de uso
+Uso frequente durante a noite.
+Ambientes escuros.
+Utilização com uma mão.
+
+Ação primária
+Existe sempre uma ação primária clara.
+Iniciar sono ou terminar sono.
+
+Feedback imediato
+O utilizador deve perceber:
+- Estado atual do sono
+- Quem iniciou
+- Há quanto tempo
+
+Evitar formulários
+Durante a noite:
+- Sem formulários
+- Sem decisões
+- Sem confirmações desnecessárias
+
+Correções
+Correções devem ser fáceis no dia seguinte.
+Editar eventos deve ser simples e reversível.
+
+Extensão futura
+Novos módulos não podem poluir o ecrã principal.
+O fluxo de sono nunca pode ser interrompido.

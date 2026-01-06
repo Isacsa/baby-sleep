@@ -1,0 +1,32 @@
+DATA AND SECURITY
+
+Natureza dos dados
+Dados dizem respeito a bebés e rotinas familiares.
+São considerados dados sensíveis.
+
+Ownership
+Todos os dados pertencem ao bebé.
+Utilizadores acedem apenas via relação de cuidador.
+
+Permissões
+Cada cuidador tem um papel associado.
+Permissões são avaliadas no backend.
+
+Row Level Security
+Todas as tabelas são protegidas por RLS.
+O acesso é sempre avaliado por baby_id.
+
+Auditoria
+Todos os eventos guardam:
+- Quem criou
+- Quando criou
+- Origem do dispositivo
+- Se foi corrigido
+
+Soft delete
+Dados não são removidos fisicamente no MVP.
+Remoções são eventos ou flags.
+
+Preparação futura
+Modelo compatível com exportação e eliminação total por bebé.
+Compatível com requisitos de privacidade europeus.
