@@ -80,5 +80,16 @@ class BabyRepositoryImpl implements BabyRepository {
       core.Error(:final failure) => DomainError(ResultAdapter.failureToDomain(failure)),
     };
   }
-}
 
+  @override
+  Future<DomainResult<Baby>> createLocal(Baby baby) async {
+    // Persist locally only (offline-first, no remote call)
+    final model = BabyMapper.toModel(baby);
+    final localResult = await localDataSource.saveBaby(model);
+    
+    return switch (localResult) {
+      core.Success() => DomainSuccess(baby),
+      core.Error(:final failure) => DomainError(ResultAdapter.failureToDomain(failure)),
+    };
+  }
+}

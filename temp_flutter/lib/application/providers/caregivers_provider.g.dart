@@ -7,7 +7,7 @@ part of 'caregivers_provider.dart';
 // **************************************************************************
 
 String _$caregiversNotifierHash() =>
-    r'1cfd50f85d780c73c97839cee8e0f9d50b7507f2';
+    r'ccfdb3171da1069196ef1915b233f369bf99cdb2';
 
 /// Caregivers provider
 ///

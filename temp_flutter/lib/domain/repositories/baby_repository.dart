@@ -32,5 +32,12 @@ abstract class BabyRepository {
   /// Only owner/editor can update
   /// Immutable fields (createdBy, createdAt) cannot be changed
   Future<DomainResult<Baby>> updateBaby(Baby baby);
+
+  /// Creates a baby locally (offline-first)
+  /// 
+  /// Persists baby to local SQLite storage only
+  /// Does NOT call remote backend
+  /// Used for offline-first baby creation
+  Future<DomainResult<Baby>> createLocal(Baby baby);
 }
 

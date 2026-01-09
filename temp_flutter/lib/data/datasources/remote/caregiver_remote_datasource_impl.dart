@@ -6,6 +6,9 @@ import 'package:temp_flutter/data/datasources/remote/caregiver_remote_datasource
 import 'package:temp_flutter/data/datasources/remote/supabase_client_impl.dart';
 
 /// Supabase implementation of CaregiverRemoteDataSource
+/// 
+/// LAYERED SYNC: Caregivers are pushed AFTER babies, BEFORE events.
+/// This ensures FK integrity - Baby must exist before Caregiver can reference it.
 class CaregiverRemoteDataSourceImpl implements CaregiverRemoteDataSource {
   final SupabaseClientImpl _supabaseClient;
 
@@ -72,6 +75,33 @@ class CaregiverRemoteDataSourceImpl implements CaregiverRemoteDataSource {
     }
   }
 
+  // ========== SYNC PUSH METHODS (Layered Sync) ==========
+
+  @override
+  Future<Result<void, Failure>> upsertCaregiver(CaregiverModel caregiver) async {
+    try {
+      _ensureAuthenticated();
+
+      // Use upsert to be idempotent - if caregiver already exists, update it
+      // This is safe to retry on network failures
+      // 
+      // IMPORTANT: Baby MUST exist remotely before calling this.
+      // The LayeredSyncOrchestrator ensures this by syncing babies first.
+      await _client.from('caregivers').upsert(
+        caregiver.toRemoteJson(),
+        onConflict: 'id', // Primary key conflict resolution
+      );
+
+      return const Success(null);
+    } on sb.AuthException catch (e) {
+      return Error(AuthFailure(e.message));
+    } on sb.PostgrestException catch (e) {
+      return Error(_mapPostgrestError(e));
+    } catch (e) {
+      return Error(NetworkFailure('Network error: $e'));
+    }
+  }
+
   /// Maps Postgrest error to domain failure
   Failure _mapPostgrestError(sb.PostgrestException e) {
     final code = e.code;
@@ -84,6 +114,17 @@ class CaregiverRemoteDataSourceImpl implements CaregiverRemoteDataSource {
     // Not found - return null success instead
     if (code == 'PGRST116') {
       return ValidationFailure('Caregiver not found');
+    }
+
+    // Foreign key violation - baby doesn't exist
+    // This should NOT happen if LayeredSyncOrchestrator is used correctly
+    if (code == '23503') {
+      return ValidationFailure('Baby does not exist remotely - sync babies first: ${e.message}');
+    }
+    
+    // Unique constraint violation (duplicate)
+    if (code == '23505') {
+      return ValidationFailure('Caregiver already exists: ${e.message}');
     }
     
     return NetworkFailure('Database error: ${e.message}');

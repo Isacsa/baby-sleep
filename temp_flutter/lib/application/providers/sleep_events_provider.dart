@@ -26,28 +26,11 @@ part 'sleep_events_provider.g.dart';
 /// Also exposes actions for creating events (offline-first)
 @riverpod
 class SleepEventsNotifier extends _$SleepEventsNotifier {
-  late final SleepEventLocalDataSourceImpl _localDataSource;
-  late final CreateSleepStart _createSleepStartUseCase;
-  late final CreateSleepEnd _createSleepEndUseCase;
+  // Use getters to create fresh instances on each access
+  // This avoids LateInitializationError when provider rebuilds
+  SleepEventLocalDataSourceImpl get _localDataSource => SleepEventLocalDataSourceImpl();
 
-  @override
-  Future<List<SleepEvent>> build() async {
-    _initDependencies();
-    
-    final activeBaby = ref.watch(activeBabyProvider);
-    
-    if (activeBaby == null) {
-      return [];
-    }
-
-    return _loadEvents(activeBaby.id);
-  }
-
-  /// Initializes dependencies (use cases, repositories)
-  void _initDependencies() {
-    _localDataSource = SleepEventLocalDataSourceImpl();
-    
-    // Create repositories for use cases
+  CreateSleepStart get _createSleepStartUseCase {
     final sleepEventRepository = SleepEventRepositoryImpl(
       localDataSource: _localDataSource,
       remoteDataSource: SleepEventRemoteDataSourceImpl(),
@@ -58,15 +41,38 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
       remoteDataSource: CaregiverRemoteDataSourceImpl(),
     );
     
-    _createSleepStartUseCase = CreateSleepStart(
+    return CreateSleepStart(
       sleepEventRepository: sleepEventRepository,
       caregiverRepository: caregiverRepository,
+    );
+  }
+
+  CreateSleepEnd get _createSleepEndUseCase {
+    final sleepEventRepository = SleepEventRepositoryImpl(
+      localDataSource: _localDataSource,
+      remoteDataSource: SleepEventRemoteDataSourceImpl(),
     );
     
-    _createSleepEndUseCase = CreateSleepEnd(
+    final caregiverRepository = CaregiverRepositoryImpl(
+      localDataSource: CaregiverLocalDataSourceImpl(),
+      remoteDataSource: CaregiverRemoteDataSourceImpl(),
+    );
+    
+    return CreateSleepEnd(
       sleepEventRepository: sleepEventRepository,
       caregiverRepository: caregiverRepository,
     );
+  }
+
+  @override
+  Future<List<SleepEvent>> build() async {
+    final activeBaby = ref.watch(activeBabyProvider);
+    
+    if (activeBaby == null) {
+      return [];
+    }
+
+    return _loadEvents(activeBaby.id);
   }
 
   /// Loads events from SQLite

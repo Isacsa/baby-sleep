@@ -138,6 +138,7 @@ class DebugPage extends ConsumerWidget {
   /// Section 2: Babies list from SQLite
   Widget _buildBabiesSection(BuildContext context, WidgetRef ref) {
     final babiesAsync = ref.watch(babiesNotifierProvider);
+    final user = ref.watch(authProvider);
     
     return _SectionCard(
       title: 'Babies (SQLite)',
@@ -161,11 +162,79 @@ class DebugPage extends ConsumerWidget {
           error: (e, _) => Text('Error: $e', style: const TextStyle(color: Colors.red)),
         ),
         const SizedBox(height: 8),
-        ElevatedButton(
-          onPressed: () => ref.read(babiesNotifierProvider.notifier).refresh(),
-          child: const Text('Refresh Babies (local)'),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () => ref.read(babiesNotifierProvider.notifier).refresh(),
+                child: const Text('Refresh'),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: user != null
+                    ? () => _showCreateBabyDialog(context, ref)
+                    : null,
+                icon: const Icon(Icons.add),
+                label: const Text('Create Baby'),
+              ),
+            ),
+          ],
         ),
+        if (user == null)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              'Login to create babies',
+              style: TextStyle(fontSize: 12, color: Colors.orange),
+            ),
+          ),
       ],
+    );
+  }
+
+  /// Shows dialog to create a new baby locally
+  void _showCreateBabyDialog(BuildContext context, WidgetRef ref) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Create Baby (local)'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Baby name',
+            hintText: 'Enter baby name',
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+              Navigator.pop(context);
+              try {
+                await ref.read(babiesNotifierProvider.notifier).createLocalBaby(
+                  name: name,
+                );
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Error: $e')),
+                  );
+                }
+              }
+            },
+            child: const Text('Create'),
+          ),
+        ],
+      ),
     );
   }
 

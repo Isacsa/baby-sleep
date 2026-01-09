@@ -118,5 +118,25 @@ class SleepEventModel {
         return 'SleepEnd';
     }
   }
+
+  /// Creates a copy with a different caregiver ID
+  /// 
+  /// Used during sync when local caregiver ID differs from remote
+  /// (backend trigger creates caregiver with different UUID)
+  SleepEventModel copyWithCaregiverId(String newCaregiverId) {
+    return SleepEventModel(
+      id: id,
+      babyId: babyId,
+      type: type,
+      timestamp: timestamp,
+      caregiverId: newCaregiverId,
+      deviceId: deviceId,
+      createdAt: createdAt,
+      isCorrected: isCorrected,
+      syncedAt: syncedAt,
+      correctedBy: correctedBy,
+      metadata: metadata,
+    );
+  }
 }
 

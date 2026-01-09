@@ -6,12 +6,14 @@ part of 'auth_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$authHash() => r'eaf6988a079fd7200dda01b517ff37f7f4562166';
+String _$authHash() => r'd82d84457939722601d92cff0593974df94ffaab';
 
 /// Auth provider
 ///
 /// Manages authenticated user state
 /// Source of truth: Supabase Auth
+///
+/// Note: Supabase must be initialized in main() before this provider is used
 ///
 /// Copied from [Auth].
 @ProviderFor(Auth)

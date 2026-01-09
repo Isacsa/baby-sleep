@@ -6,6 +6,9 @@ import 'package:temp_flutter/data/models/baby_model.dart';
 /// 
 /// Handles local persistence of babies
 /// Used for offline-first access
+/// 
+/// LAYERED SYNC: Babies are synced FIRST, before caregivers and events.
+/// This ensures FK integrity in the backend (Baby must exist before Caregiver).
 abstract class BabyLocalDataSource {
   /// Gets all babies from local storage
   Future<Result<List<BabyModel>, Failure>> getBabies();
@@ -21,5 +24,25 @@ abstract class BabyLocalDataSource {
 
   /// Deletes baby from local storage
   Future<Result<void, Failure>> deleteBaby(String babyId);
+
+  // ========== SYNC METHODS (Layered Sync) ==========
+
+  /// Gets babies that have not been synced to remote
+  /// 
+  /// Returns babies where synced_at IS NULL
+  /// Used by LayeredSyncOrchestrator to push babies BEFORE caregivers/events
+  Future<Result<List<BabyModel>, Failure>> getUnsyncedBabies();
+
+  /// Marks a baby as synced after successful push to remote
+  /// 
+  /// [babyId] - The baby ID
+  /// [syncedAt] - Timestamp of successful sync
+  Future<Result<void, Failure>> markBabySynced(String babyId, DateTime syncedAt);
+
+  /// Checks if a baby exists remotely (synced_at is not null)
+  /// 
+  /// [babyId] - The baby ID to check
+  /// Returns true if baby has been synced to remote
+  Future<Result<bool, Failure>> isBabySynced(String babyId);
 }
 

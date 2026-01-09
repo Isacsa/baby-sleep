@@ -1,11 +1,14 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:temp_flutter/core/types/result.dart' as core;
 import 'package:temp_flutter/sync/sync_state.dart';
-import 'package:temp_flutter/sync/sync_push_engine.dart';
 import 'package:temp_flutter/sync/sync_pull_engine.dart';
+import 'package:temp_flutter/sync/layered_sync_orchestrator.dart';
 import 'package:temp_flutter/data/datasources/local/sleep_event_local_datasource_impl.dart';
 import 'package:temp_flutter/data/datasources/local/baby_local_datasource_impl.dart';
+import 'package:temp_flutter/data/datasources/local/caregiver_local_datasource_impl.dart';
 import 'package:temp_flutter/data/datasources/remote/sleep_event_remote_datasource_impl.dart';
+import 'package:temp_flutter/data/datasources/remote/baby_remote_datasource_impl.dart';
+import 'package:temp_flutter/data/datasources/remote/caregiver_remote_datasource_impl.dart';
 
 part 'sync_provider.g.dart';
 
@@ -13,117 +16,151 @@ part 'sync_provider.g.dart';
 /// 
 /// Manages synchronization state and operations
 /// Exposes sync state to UI (idle/syncing/success/error)
+/// 
+/// LAYERED SYNC STRATEGY:
+/// Push operations use LayeredSyncOrchestrator which syncs in order:
+/// 1. Babies first (must exist before caregivers)
+/// 2. Caregivers second (must exist before events can reference them)
+/// 3. SleepEvents last (depend on caregiver existing remotely)
+/// 
+/// This ensures FK integrity in the backend and prevents the error:
+/// "Caregiver does not exist, is inactive, or does not belong to this baby"
 @riverpod
 class Sync extends _$Sync {
-  late final SyncPushEngine _pushEngine;
-  late final SyncPullEngine _pullEngine;
-  bool _initialized = false;
+  LayeredSyncOrchestrator? _layeredSyncOrchestrator;
+  SyncPullEngine? _pullEngine;
 
   @override
   SyncState build() {
-    _initializeEngines();
     return SyncState.initial();
   }
 
-  /// Initializes the sync engines
-  void _initializeEngines() {
-    if (_initialized) return;
-    
-    final localDataSource = SleepEventLocalDataSourceImpl();
-    final remoteDataSource = SleepEventRemoteDataSourceImpl();
-    final babyDataSource = BabyLocalDataSourceImpl();
-    
-    _pushEngine = SyncPushEngine(
-      localDataSource: localDataSource,
-      remoteDataSource: remoteDataSource,
+  /// Gets or creates the layered sync orchestrator
+  LayeredSyncOrchestrator get _orchestrator {
+    _layeredSyncOrchestrator ??= LayeredSyncOrchestrator(
+      babyLocalDataSource: BabyLocalDataSourceImpl(),
+      babyRemoteDataSource: BabyRemoteDataSourceImpl(),
+      caregiverLocalDataSource: CaregiverLocalDataSourceImpl(),
+      caregiverRemoteDataSource: CaregiverRemoteDataSourceImpl(),
+      eventLocalDataSource: SleepEventLocalDataSourceImpl(),
+      eventRemoteDataSource: SleepEventRemoteDataSourceImpl(),
     );
-    
-    _pullEngine = SyncPullEngine(
-      localDataSource: localDataSource,
-      remoteDataSource: remoteDataSource,
-      babyDataSource: babyDataSource,
-    );
-    
-    // Listen to state changes from both engines
-    _pushEngine.onStateChanged = (newState) {
-      state = newState;
-    };
-    
-    _pullEngine.onStateChanged = (newState) {
-      state = newState;
-    };
-    
-    _initialized = true;
+    return _layeredSyncOrchestrator!;
   }
 
-  /// Pushes unsynced events for a specific baby
+  /// Gets or creates the pull engine
+  SyncPullEngine get _pull {
+    _pullEngine ??= SyncPullEngine(
+      localDataSource: SleepEventLocalDataSourceImpl(),
+      remoteDataSource: SleepEventRemoteDataSourceImpl(),
+      babyDataSource: BabyLocalDataSourceImpl(),
+    );
+    return _pullEngine!;
+  }
+
+  /// Pushes unsynced entities for a specific baby (layered)
   /// 
-  /// Use this when you want to sync events for the active baby only
+  /// Uses LAYERED SYNC: Baby → Caregivers → SleepEvents
+  /// This ensures all dependencies exist remotely before pushing events
   Future<void> pushForBaby(String babyId) async {
-    _initializeEngines();
-    
-    // Update state to syncing
     state = SyncState.syncing(pendingEventsCount: 0);
-    
-    final result = await _pushEngine.pushForBaby(babyId);
-    
-    // State is updated via callback, but ensure final state is set
+
+    final result = await _orchestrator.syncForBaby(babyId);
+
     switch (result) {
       case core.Error(:final failure):
         state = SyncState.error(
           errorMessage: failure.message,
           lastSyncedAt: state.lastSyncedAt,
         );
-      case core.Success():
-        // State already updated via callback
-        break;
+      case core.Success(:final data):
+        if (data.hasTransientError) {
+          state = SyncState.error(
+            errorMessage: data.errorMessage ?? 'Network error - will retry',
+            lastSyncedAt: state.lastSyncedAt,
+          );
+        } else if (data.totalErrors > 0) {
+          state = SyncState.success(
+            lastSyncedAt: DateTime.now().toUtc(),
+          ).copyWith(
+            errorMessage: '${data.totalErrors} items failed to sync',
+          );
+        } else {
+          state = SyncState.success(
+            lastSyncedAt: DateTime.now().toUtc(),
+          );
+        }
+        // ignore: avoid_print
+        print('[SyncProvider] Layered push complete: '
+            '${data.babiesPushed} babies, '
+            '${data.caregiversPushed} caregivers, '
+            '${data.eventsPushed} events');
     }
   }
 
-  /// Pushes all unsynced events (global sync)
+  /// Pushes all unsynced entities (global layered sync)
   /// 
-  /// Use this when you want to sync all pending events regardless of baby
+  /// Uses LAYERED SYNC: All Babies → All Caregivers → All SleepEvents
   Future<void> pushAll() async {
-    _initializeEngines();
-    
     state = SyncState.syncing(pendingEventsCount: 0);
-    
-    final result = await _pushEngine.pushAll();
-    
+
+    final result = await _orchestrator.syncAll();
+
     switch (result) {
       case core.Error(:final failure):
         state = SyncState.error(
           errorMessage: failure.message,
           lastSyncedAt: state.lastSyncedAt,
         );
-      case core.Success():
-        // State already updated via callback
-        break;
+      case core.Success(:final data):
+        if (data.hasTransientError) {
+          state = SyncState.error(
+            errorMessage: data.errorMessage ?? 'Network error - will retry',
+            lastSyncedAt: state.lastSyncedAt,
+          );
+        } else if (data.totalErrors > 0) {
+          state = SyncState.success(
+            lastSyncedAt: DateTime.now().toUtc(),
+          ).copyWith(
+            errorMessage: '${data.totalErrors} items failed to sync',
+          );
+        } else {
+          state = SyncState.success(
+            lastSyncedAt: DateTime.now().toUtc(),
+          );
+        }
+        // ignore: avoid_print
+        print('[SyncProvider] Layered push complete: '
+            '${data.babiesPushed} babies, '
+            '${data.caregiversPushed} caregivers, '
+            '${data.eventsPushed} events');
     }
   }
 
   /// Gets count of pending events for a baby
+  /// 
+  /// Note: This only counts SleepEvents, not unsynced babies/caregivers
   Future<int> getPendingCount(String babyId) async {
-    _initializeEngines();
-    return await _pushEngine.getPendingCount(babyId);
+    final localDataSource = SleepEventLocalDataSourceImpl();
+    final result = await localDataSource.getUnsyncedEvents(babyId);
+    return result.isSuccess ? (result.dataOrNull?.length ?? 0) : 0;
   }
 
   /// Gets count of all pending events
   Future<int> getAllPendingCount() async {
-    _initializeEngines();
-    return await _pushEngine.getAllPendingCount();
+    final localDataSource = SleepEventLocalDataSourceImpl();
+    final result = await localDataSource.getAllUnsyncedEvents();
+    return result.isSuccess ? (result.dataOrNull?.length ?? 0) : 0;
   }
 
   /// Pulls new remote events for a specific baby
   /// 
   /// Use this when you want to receive events created by other devices/caregivers
   Future<void> pullForBaby(String babyId) async {
-    _initializeEngines();
-    
     state = SyncState.syncing(pendingEventsCount: 0);
-    
-    final result = await _pullEngine.pullForBaby(babyId);
-    
+
+    final result = await _pull.pullForBaby(babyId);
+
     switch (result) {
       case core.Error(:final failure):
         state = SyncState.error(
@@ -131,8 +168,9 @@ class Sync extends _$Sync {
           lastSyncedAt: state.lastSyncedAt,
         );
       case core.Success():
-        // State already updated via callback
-        break;
+        state = SyncState.success(
+          lastSyncedAt: DateTime.now().toUtc(),
+        );
     }
   }
 
@@ -140,12 +178,10 @@ class Sync extends _$Sync {
   /// 
   /// Use this when you want to receive all new events regardless of baby
   Future<void> pullAll() async {
-    _initializeEngines();
-    
     state = SyncState.syncing(pendingEventsCount: 0);
-    
-    final result = await _pullEngine.pullAll();
-    
+
+    final result = await _pull.pullAll();
+
     switch (result) {
       case core.Error(:final failure):
         state = SyncState.error(
@@ -153,23 +189,31 @@ class Sync extends _$Sync {
           lastSyncedAt: state.lastSyncedAt,
         );
       case core.Success():
-        // State already updated via callback
-        break;
+        state = SyncState.success(
+          lastSyncedAt: DateTime.now().toUtc(),
+        );
     }
   }
 
-  /// Full sync: push then pull
+  /// Full sync: push then pull (layered)
   /// 
-  /// Pushes local events first, then pulls remote events
+  /// Uses LAYERED SYNC for push, then pulls remote events
   Future<void> syncFull(String babyId) async {
     await pushForBaby(babyId);
-    await pullForBaby(babyId);
+    
+    // Only pull if push succeeded (no transient error)
+    if (state.status != SyncStatus.error) {
+      await pullForBaby(babyId);
+    }
   }
 
-  /// Full sync for all babies
+  /// Full sync for all babies (layered)
   Future<void> syncAll() async {
     await pushAll();
-    await pullAll();
+    
+    if (state.status != SyncStatus.error) {
+      await pullAll();
+    }
   }
 
   /// Resets sync state to idle

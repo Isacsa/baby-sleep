@@ -6,12 +6,21 @@ part of 'sync_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$syncHash() => r'e4fc21db4a655097b4d9115b82326898b5ca6b3a';
+String _$syncHash() => r'e3bb75be21722eaf644b37618536c46f38540bdf';
 
 /// Sync provider
 ///
 /// Manages synchronization state and operations
 /// Exposes sync state to UI (idle/syncing/success/error)
+///
+/// LAYERED SYNC STRATEGY:
+/// Push operations use LayeredSyncOrchestrator which syncs in order:
+/// 1. Babies first (must exist before caregivers)
+/// 2. Caregivers second (must exist before events can reference them)
+/// 3. SleepEvents last (depend on caregiver existing remotely)
+///
+/// This ensures FK integrity in the backend and prevents the error:
+/// "Caregiver does not exist, is inactive, or does not belong to this baby"
 ///
 /// Copied from [Sync].
 @ProviderFor(Sync)

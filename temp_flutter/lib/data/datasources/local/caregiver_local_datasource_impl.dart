@@ -51,7 +51,7 @@ class CaregiverLocalDataSourceImpl implements CaregiverLocalDataSource {
     }
   }
 
-  /// Gets caregiver by user ID for a specific baby
+  @override
   Future<Result<CaregiverModel?, Failure>> getCaregiverByUserIdForBaby({
     required String userId,
     required String babyId,
@@ -123,6 +123,95 @@ class CaregiverLocalDataSourceImpl implements CaregiverLocalDataSource {
       return const Success(null);
     } catch (e) {
       return Error(StorageFailure('Failed to delete caregiver: $e', originalError: e));
+    }
+  }
+
+  // ========== SYNC METHODS (Layered Sync) ==========
+  // 
+  // These methods support the layered sync strategy:
+  // 1. Push Babies first (must exist before caregivers)
+  // 2. Push Caregivers second (must exist before events)
+  // 3. Push SleepEvents last (depends on caregiver existing)
+  //
+  // CRITICAL: We only push caregivers when their baby is already synced.
+  // This prevents the "Caregiver does not exist" error on SleepEvent push.
+
+  @override
+  Future<Result<List<CaregiverModel>, Failure>> getUnsyncedCaregivers() async {
+    try {
+      final db = await _localDatabase.database;
+      final maps = await db.query(
+        'caregivers',
+        where: 'synced_at IS NULL',
+        orderBy: 'created_at ASC', // Sync oldest first
+      );
+
+      final caregivers = maps.map((map) => CaregiverModel.fromJson(map)).toList();
+      return Success(caregivers);
+    } catch (e) {
+      return Error(StorageFailure('Failed to get unsynced caregivers: $e', originalError: e));
+    }
+  }
+
+  @override
+  Future<Result<List<CaregiverModel>, Failure>> getUnsyncedCaregiversForSyncedBabies() async {
+    try {
+      final db = await _localDatabase.database;
+      
+      // Join with babies to ensure baby is synced before we try to push caregiver
+      // This is the key to layered sync - we only push caregivers when
+      // their parent baby exists remotely
+      final maps = await db.rawQuery('''
+        SELECT c.* FROM caregivers c
+        INNER JOIN babies b ON c.baby_id = b.id
+        WHERE c.synced_at IS NULL
+          AND b.synced_at IS NOT NULL
+        ORDER BY c.created_at ASC
+      ''');
+
+      final caregivers = maps.map((map) => CaregiverModel.fromJson(map)).toList();
+      return Success(caregivers);
+    } catch (e) {
+      return Error(StorageFailure('Failed to get unsynced caregivers for synced babies: $e', originalError: e));
+    }
+  }
+
+  @override
+  Future<Result<void, Failure>> markCaregiverSynced(String caregiverId, DateTime syncedAt) async {
+    try {
+      final db = await _localDatabase.database;
+      await db.update(
+        'caregivers',
+        {'synced_at': syncedAt.toIso8601String()},
+        where: 'id = ?',
+        whereArgs: [caregiverId],
+      );
+      return const Success(null);
+    } catch (e) {
+      return Error(StorageFailure('Failed to mark caregiver as synced: $e', originalError: e));
+    }
+  }
+
+  @override
+  Future<Result<bool, Failure>> isCaregiverSynced(String caregiverId) async {
+    try {
+      final db = await _localDatabase.database;
+      final maps = await db.query(
+        'caregivers',
+        columns: ['synced_at'],
+        where: 'id = ?',
+        whereArgs: [caregiverId],
+        limit: 1,
+      );
+
+      if (maps.isEmpty) {
+        return const Success(false); // Caregiver doesn't exist
+      }
+
+      final syncedAt = maps.first['synced_at'];
+      return Success(syncedAt != null);
+    } catch (e) {
+      return Error(StorageFailure('Failed to check caregiver sync status: $e', originalError: e));
     }
   }
 }

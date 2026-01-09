@@ -31,3 +31,9 @@ class StorageFailure extends DomainFailure {
   const StorageFailure(super.message);
 }
 
+/// Failure for not authenticated errors
+class NotAuthenticatedFailure extends DomainFailure {
+  const NotAuthenticatedFailure([String message = 'User is not authenticated'])
+      : super(message);
+}
+

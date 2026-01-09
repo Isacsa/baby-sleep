@@ -6,7 +6,7 @@ part of 'babies_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$babiesNotifierHash() => r'8a0444e6176963e2c382e317ff24b396656b1e27';
+String _$babiesNotifierHash() => r'db6db420300c276f9f57cc9a72671ff4a7ec0384';
 
 /// Babies provider
 ///

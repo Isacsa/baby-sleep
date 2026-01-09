@@ -1,7 +1,17 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:temp_flutter/core/types/result.dart';
+import 'package:temp_flutter/core/errors/failures.dart';
 import 'package:temp_flutter/domain/entities/baby.dart';
+import 'package:temp_flutter/domain/common/result.dart' as domain;
+import 'package:temp_flutter/domain/use_cases/baby/create_baby_local.dart';
 import 'package:temp_flutter/data/datasources/local/baby_local_datasource_impl.dart';
+import 'package:temp_flutter/data/datasources/local/caregiver_local_datasource_impl.dart';
+import 'package:temp_flutter/data/datasources/remote/baby_remote_datasource.dart';
+import 'package:temp_flutter/data/datasources/remote/caregiver_remote_datasource_impl.dart';
+import 'package:temp_flutter/data/models/baby_model.dart';
+import 'package:temp_flutter/data/repositories/baby_repository_impl.dart';
+import 'package:temp_flutter/data/repositories/caregiver_repository_impl.dart';
+import 'auth_provider.dart';
 
 part 'babies_provider.g.dart';
 
@@ -12,11 +22,11 @@ part 'babies_provider.g.dart';
 /// Updates when sync completes or baby is created
 @riverpod
 class BabiesNotifier extends _$BabiesNotifier {
-  late final BabyLocalDataSourceImpl _localDataSource;
+  // Use getter instead of late final to avoid re-initialization error on rebuild
+  BabyLocalDataSourceImpl get _localDataSource => BabyLocalDataSourceImpl();
 
   @override
   Future<List<Baby>> build() async {
-    _localDataSource = BabyLocalDataSourceImpl();
     return _loadBabies();
   }
 
@@ -36,5 +46,85 @@ class BabiesNotifier extends _$BabiesNotifier {
   Future<void> refresh() async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(() => _loadBabies());
+  }
+
+  /// Creates a baby locally (offline-first)
+  /// 
+  /// Also creates the owner caregiver automatically
+  /// Refreshes the babies list on success
+  Future<void> createLocalBaby({
+    required String name,
+    DateTime? birthDate,
+  }) async {
+    // Get current user from auth provider
+    final user = ref.read(authProvider);
+    final userId = user?.id;
+
+    // Create repositories (local only for this flow)
+    final babyRepository = BabyRepositoryImpl(
+      localDataSource: _localDataSource,
+      remoteDataSource: _NoopBabyRemoteDataSource(),
+    );
+
+    final caregiverRepository = CaregiverRepositoryImpl(
+      localDataSource: CaregiverLocalDataSourceImpl(),
+      remoteDataSource: CaregiverRemoteDataSourceImpl(),
+    );
+
+    // Execute use case
+    final useCase = CreateBabyLocal(
+      babyRepository: babyRepository,
+      caregiverRepository: caregiverRepository,
+    );
+
+    final result = await useCase.execute(
+      userId: userId,
+      name: name,
+      birthDate: birthDate,
+    );
+
+    switch (result) {
+      case domain.DomainSuccess():
+        // Refresh babies list to show the new baby
+        await refresh();
+      case domain.DomainError(:final failure):
+        // Log error (in production, could show snackbar via another mechanism)
+        // ignore: avoid_print
+        print('Error creating baby: ${failure.message}');
+        throw Exception(failure.message);
+    }
+  }
+}
+
+/// Noop implementation of BabyRemoteDataSource for local-only operations
+/// 
+/// All methods throw - this is never called in the local-only flow
+class _NoopBabyRemoteDataSource implements BabyRemoteDataSource {
+  @override
+  Future<Result<List<BabyModel>, Failure>> getAccessibleBabies() {
+    throw UnimplementedError('Remote not used in local-only flow');
+  }
+
+  @override
+  Future<Result<BabyModel?, Failure>> getBabyById(String babyId) {
+    throw UnimplementedError('Remote not used in local-only flow');
+  }
+
+  @override
+  Future<Result<BabyModel, Failure>> createBaby({
+    required String name,
+    DateTime? birthDate,
+  }) {
+    throw UnimplementedError('Remote not used in local-only flow');
+  }
+
+  @override
+  Future<Result<BabyModel, Failure>> updateBaby(BabyModel baby) {
+    throw UnimplementedError('Remote not used in local-only flow');
+  }
+
+  @override
+  Future<Result<void, Failure>> upsertBaby(BabyModel baby) {
+    throw UnimplementedError('Remote not used in local-only flow');
   }
 }

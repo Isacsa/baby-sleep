@@ -7,7 +7,7 @@ import 'package:path/path.dart';
 /// Used for offline-first persistence
 class LocalDatabase {
   static const String _databaseName = 'baby_sleep.db';
-  static const int _databaseVersion = 2;
+  static const int _databaseVersion = 3;
 
   // Singleton instance
   static LocalDatabase? _instance;
@@ -43,6 +43,7 @@ class LocalDatabase {
   /// Creates database schema (version 1)
   Future<void> _onCreate(Database db, int version) async {
     // Create babies table
+    // synced_at: NULL = never synced (local only), set = pushed to Supabase
     await db.execute('''
       CREATE TABLE babies (
         id TEXT PRIMARY KEY NOT NULL,
@@ -50,11 +51,13 @@ class LocalDatabase {
         created_at TEXT NOT NULL,
         created_by TEXT NOT NULL,
         birth_date TEXT,
-        updated_at TEXT NOT NULL
+        updated_at TEXT NOT NULL,
+        synced_at TEXT
       )
     ''');
 
     // Create caregivers table
+    // synced_at: NULL = never synced (local only), set = pushed to Supabase
     await db.execute('''
       CREATE TABLE caregivers (
         id TEXT PRIMARY KEY NOT NULL,
@@ -64,6 +67,7 @@ class LocalDatabase {
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL,
         invited_by TEXT,
+        synced_at TEXT,
         FOREIGN KEY (baby_id) REFERENCES babies (id)
       )
     ''');
@@ -108,6 +112,16 @@ class LocalDatabase {
       CREATE INDEX idx_caregivers_user_id ON caregivers (user_id)
     ''');
 
+    // Index for unsynced babies (layered sync)
+    await db.execute('''
+      CREATE INDEX idx_babies_unsynced ON babies (synced_at) WHERE synced_at IS NULL
+    ''');
+
+    // Index for unsynced caregivers (layered sync)
+    await db.execute('''
+      CREATE INDEX idx_caregivers_unsynced ON caregivers (synced_at) WHERE synced_at IS NULL
+    ''');
+
     // Create sync_state table for tracking last synced timestamp per baby
     await db.execute('''
       CREATE TABLE sync_state (
@@ -138,6 +152,28 @@ class LocalDatabase {
 
       await db.execute('''
         CREATE INDEX IF NOT EXISTS idx_sync_state_baby_id ON sync_state (baby_id)
+      ''');
+    }
+
+    if (oldVersion < 3) {
+      // Migration to version 3: Add synced_at to babies and caregivers
+      // 
+      // WHY: Enable layered sync (Baby → Caregiver → SleepEvent)
+      // Without synced_at tracking, we can't know if Baby/Caregiver
+      // exists remotely, causing push failures on dependent SleepEvents.
+      // 
+      // NULL = never synced (local only)
+      // ISO8601 = pushed to Supabase at that time
+      
+      await db.execute('ALTER TABLE babies ADD COLUMN synced_at TEXT');
+      await db.execute('ALTER TABLE caregivers ADD COLUMN synced_at TEXT');
+
+      // Create indexes for efficient unsynced queries
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_babies_unsynced ON babies (synced_at) WHERE synced_at IS NULL
+      ''');
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_caregivers_unsynced ON caregivers (synced_at) WHERE synced_at IS NULL
       ''');
     }
   }

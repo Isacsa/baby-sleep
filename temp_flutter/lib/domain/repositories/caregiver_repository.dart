@@ -22,5 +22,16 @@ abstract class CaregiverRepository {
   /// Returns caregiver where userId = current user
   /// Used to get caregiver_id for creating events
   Future<DomainResult<Caregiver?>> getCurrentUserCaregiverForBaby(String babyId);
+
+  /// Ensures a local owner caregiver exists for the given baby and user
+  /// 
+  /// If caregiver already exists for (babyId, userId) -> returns existing (idempotent)
+  /// If not -> creates new owner caregiver locally
+  /// Does NOT call remote backend
+  Future<DomainResult<Caregiver>> ensureLocalOwnerCaregiver({
+    required String babyId,
+    required String userId,
+    required DateTime nowUtc,
+  });
 }
 

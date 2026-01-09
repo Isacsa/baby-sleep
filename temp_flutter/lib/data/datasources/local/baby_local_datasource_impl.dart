@@ -96,5 +96,68 @@ class BabyLocalDataSourceImpl implements BabyLocalDataSource {
       return Error(StorageFailure('Failed to delete baby: $e', originalError: e));
     }
   }
+
+  // ========== SYNC METHODS (Layered Sync) ==========
+  // 
+  // These methods support the layered sync strategy:
+  // 1. Push Babies first (must exist before caregivers)
+  // 2. Push Caregivers second (must exist before events)
+  // 3. Push SleepEvents last (depends on caregiver existing)
+
+  @override
+  Future<Result<List<BabyModel>, Failure>> getUnsyncedBabies() async {
+    try {
+      final db = await _localDatabase.database;
+      final maps = await db.query(
+        'babies',
+        where: 'synced_at IS NULL',
+        orderBy: 'created_at ASC', // Sync oldest first
+      );
+
+      final babies = maps.map((map) => BabyModel.fromJson(map)).toList();
+      return Success(babies);
+    } catch (e) {
+      return Error(StorageFailure('Failed to get unsynced babies: $e', originalError: e));
+    }
+  }
+
+  @override
+  Future<Result<void, Failure>> markBabySynced(String babyId, DateTime syncedAt) async {
+    try {
+      final db = await _localDatabase.database;
+      await db.update(
+        'babies',
+        {'synced_at': syncedAt.toIso8601String()},
+        where: 'id = ?',
+        whereArgs: [babyId],
+      );
+      return const Success(null);
+    } catch (e) {
+      return Error(StorageFailure('Failed to mark baby as synced: $e', originalError: e));
+    }
+  }
+
+  @override
+  Future<Result<bool, Failure>> isBabySynced(String babyId) async {
+    try {
+      final db = await _localDatabase.database;
+      final maps = await db.query(
+        'babies',
+        columns: ['synced_at'],
+        where: 'id = ?',
+        whereArgs: [babyId],
+        limit: 1,
+      );
+
+      if (maps.isEmpty) {
+        return const Success(false); // Baby doesn't exist
+      }
+
+      final syncedAt = maps.first['synced_at'];
+      return Success(syncedAt != null);
+    } catch (e) {
+      return Error(StorageFailure('Failed to check baby sync status: $e', originalError: e));
+    }
+  }
 }
 

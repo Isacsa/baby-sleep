@@ -2,8 +2,10 @@ import 'package:temp_flutter/domain/entities/caregiver.dart';
 import 'package:temp_flutter/domain/repositories/caregiver_repository.dart';
 import 'package:temp_flutter/domain/common/result.dart';
 import 'package:temp_flutter/core/types/result.dart' as core;
+import 'package:temp_flutter/core/utils/uuid_generator.dart';
 import 'package:temp_flutter/data/datasources/local/caregiver_local_datasource.dart';
 import 'package:temp_flutter/data/datasources/remote/caregiver_remote_datasource.dart';
+import 'package:temp_flutter/data/models/caregiver_model.dart';
 import 'package:temp_flutter/data/mappers/caregiver_mapper.dart';
 import 'package:temp_flutter/data/adapters/result_adapter.dart';
 
@@ -59,6 +61,50 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
           return DomainSuccess<Caregiver?>(data.first);
         }(),
       DomainError(:final failure) => DomainError<Caregiver?>(failure),
+    };
+  }
+
+  @override
+  Future<DomainResult<Caregiver>> ensureLocalOwnerCaregiver({
+    required String babyId,
+    required String userId,
+    required DateTime nowUtc,
+  }) async {
+    // Check if caregiver already exists (idempotency)
+    final existingResult = await localDataSource.getCaregiverByUserIdForBaby(
+      userId: userId,
+      babyId: babyId,
+    );
+
+    switch (existingResult) {
+      case core.Success(:final data):
+        if (data != null) {
+          // Already exists - return it (idempotent)
+          return DomainSuccess(data.toDomain());
+        }
+        // Doesn't exist - create new owner caregiver
+        break;
+      case core.Error(:final failure):
+        return DomainError(ResultAdapter.failureToDomain(failure));
+    }
+
+    // Create new owner caregiver
+    final caregiverId = UuidGenerator.generate();
+    final caregiverModel = CaregiverModel(
+      id: caregiverId,
+      babyId: babyId,
+      userId: userId,
+      role: 'owner',
+      createdAt: nowUtc.toIso8601String(),
+      updatedAt: nowUtc.toIso8601String(),
+      invitedBy: null, // Owner is not invited
+    );
+
+    final saveResult = await localDataSource.saveCaregiver(caregiverModel);
+
+    return switch (saveResult) {
+      core.Success() => DomainSuccess(caregiverModel.toDomain()),
+      core.Error(:final failure) => DomainError(ResultAdapter.failureToDomain(failure)),
     };
   }
 }

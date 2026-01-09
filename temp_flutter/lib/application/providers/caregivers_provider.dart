@@ -12,12 +12,11 @@ part 'caregivers_provider.g.dart';
 /// Reads from SQLite (offline-first)
 @riverpod
 class CaregiversNotifier extends _$CaregiversNotifier {
-  late final CaregiverLocalDataSourceImpl _localDataSource;
+  // Use getter instead of late final to avoid re-initialization error
+  CaregiverLocalDataSourceImpl get _localDataSource => CaregiverLocalDataSourceImpl();
 
   @override
   Future<List<Caregiver>> build() async {
-    _localDataSource = CaregiverLocalDataSourceImpl();
-    
     final activeBaby = ref.watch(activeBabyProvider);
     
     if (activeBaby == null) {
