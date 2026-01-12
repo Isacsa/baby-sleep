@@ -319,6 +319,9 @@ class LayeredSyncOrchestrator {
     // ignore: avoid_print
     print('[LayeredSync] Pushed baby: $babyId');
 
+    // Canonicalize caregiver after baby push
+    await _syncCaregiverAfterBabyPush(babyId, baby.createdBy, now);
+
     return const Success(true);
   }
 
@@ -451,9 +454,12 @@ class LayeredSyncOrchestrator {
 
   // ========== LAYER 3: SLEEP EVENTS ==========
   // 
-  // IMPORTANT: The local caregiver ID differs from the remote one because
-  // the backend trigger creates the caregiver with its own UUID.
-  // We need to fetch the remote caregiver ID and use it when pushing events.
+  // After baby push, the canonicalization step aligns local caregiver IDs
+  // with remote IDs. Events now reference the canonical (remote) caregiver_id
+  // directly in SQLite, so we don't need per-event ID mapping.
+  //
+  // If the backend rejects an event due to missing caregiver, it means
+  // canonicalization failed or wasn't run - we mark a clear error.
 
   Future<Result<_PushLayerResult, Failure>> _pushEvents() async {
     // Get all unsynced events
@@ -467,55 +473,30 @@ class LayeredSyncOrchestrator {
       return const Success(_PushLayerResult());
     }
 
-    // Cache remote caregiver IDs to avoid repeated API calls
-    // Map: "babyId:userId" -> remoteCaregiverId
-    final remoteCaregiverCache = <String, String>{};
-
     var successCount = 0;
     var errorCount = 0;
     var hasTransientError = false;
 
     for (final event in unsyncedEvents) {
-      // Check if caregiver is synced BEFORE attempting push
+      // Check if caregiver is synced (canonical) BEFORE attempting push
       final caregiverSyncedResult = await _caregiverLocalDataSource.isCaregiverSynced(event.caregiverId);
       if (caregiverSyncedResult.isError || caregiverSyncedResult.dataOrNull != true) {
+        // Caregiver not synced - this means canonicalization hasn't happened yet
+        // Mark event with clear error for diagnostics
+        await _eventLocalDataSource.markEventSyncError(
+          event.id,
+          'missing_remote_dependency',
+          'Caregiver ${event.caregiverId} not synced - run canonicalization first',
+        );
+        errorCount++;
         // ignore: avoid_print
-        print('[LayeredSync] Skipping event ${event.id} - caregiver ${event.caregiverId} not synced');
+        print('[LayeredSync] Event ${event.id} skipped: caregiver ${event.caregiverId} not synced (missing_remote_dependency)');
         continue;
       }
 
-      // Get the local caregiver to find the userId
-      final localCaregiverResult = await _caregiverLocalDataSource.getCaregiverById(event.caregiverId);
-      if (localCaregiverResult.isError || localCaregiverResult.dataOrNull == null) {
-        // ignore: avoid_print
-        print('[LayeredSync] Skipping event ${event.id} - cannot find local caregiver');
-        continue;
-      }
-      final localCaregiver = localCaregiverResult.dataOrNull!;
-
-      // Get remote caregiver ID (use cache if available)
-      final cacheKey = '${event.babyId}:${localCaregiver.userId}';
-      String? remoteCaregiverId = remoteCaregiverCache[cacheKey];
-      
-      if (remoteCaregiverId == null) {
-        remoteCaregiverId = await _getRemoteCaregiverId(event.babyId, localCaregiver.userId);
-        if (remoteCaregiverId != null) {
-          remoteCaregiverCache[cacheKey] = remoteCaregiverId;
-        }
-      }
-
-      if (remoteCaregiverId == null) {
-        // ignore: avoid_print
-        print('[LayeredSync] Skipping event ${event.id} - cannot find remote caregiver for user ${localCaregiver.userId}');
-        continue;
-      }
-
-      // Create event with remote caregiver ID
-      final eventToSync = event.copyWithCaregiverId(remoteCaregiverId);
-      // ignore: avoid_print
-      print('[LayeredSync] Pushing event with remote caregiver ID: ${event.caregiverId} -> $remoteCaregiverId');
-
-      final pushResult = await _eventRemoteDataSource.createSleepEvent(eventToSync);
+      // Push event using the canonical caregiver_id already in SQLite
+      // (No per-event ID mapping needed after canonicalization)
+      final pushResult = await _eventRemoteDataSource.createSleepEvent(event);
 
       if (pushResult.isSuccess) {
         final now = DateTime.now().toUtc();
@@ -564,52 +545,28 @@ class LayeredSyncOrchestrator {
       return const Success(_PushLayerResult());
     }
 
-    // Cache remote caregiver IDs
-    final remoteCaregiverCache = <String, String>{};
-
     var successCount = 0;
     var errorCount = 0;
     var hasTransientError = false;
 
     for (final event in unsyncedEvents) {
-      // Check if caregiver is synced
+      // Check if caregiver is synced (canonical)
       final caregiverSyncedResult = await _caregiverLocalDataSource.isCaregiverSynced(event.caregiverId);
       if (caregiverSyncedResult.isError || caregiverSyncedResult.dataOrNull != true) {
+        // Mark event with clear error for diagnostics
+        await _eventLocalDataSource.markEventSyncError(
+          event.id,
+          'missing_remote_dependency',
+          'Caregiver ${event.caregiverId} not synced - run canonicalization first',
+        );
+        errorCount++;
         // ignore: avoid_print
-        print('[LayeredSync] Skipping event ${event.id} - caregiver ${event.caregiverId} not synced');
+        print('[LayeredSync] Event ${event.id} skipped: caregiver ${event.caregiverId} not synced (missing_remote_dependency)');
         continue;
       }
 
-      // Get the local caregiver to find the userId
-      final localCaregiverResult = await _caregiverLocalDataSource.getCaregiverById(event.caregiverId);
-      if (localCaregiverResult.isError || localCaregiverResult.dataOrNull == null) {
-        // ignore: avoid_print
-        print('[LayeredSync] Skipping event ${event.id} - cannot find local caregiver');
-        continue;
-      }
-      final localCaregiver = localCaregiverResult.dataOrNull!;
-
-      // Get remote caregiver ID (use cache if available)
-      final cacheKey = '${event.babyId}:${localCaregiver.userId}';
-      String? remoteCaregiverId = remoteCaregiverCache[cacheKey];
-      
-      if (remoteCaregiverId == null) {
-        remoteCaregiverId = await _getRemoteCaregiverId(event.babyId, localCaregiver.userId);
-        if (remoteCaregiverId != null) {
-          remoteCaregiverCache[cacheKey] = remoteCaregiverId;
-        }
-      }
-
-      if (remoteCaregiverId == null) {
-        // ignore: avoid_print
-        print('[LayeredSync] Skipping event ${event.id} - cannot find remote caregiver');
-        continue;
-      }
-
-      // Create event with remote caregiver ID
-      final eventToSync = event.copyWithCaregiverId(remoteCaregiverId);
-
-      final pushResult = await _eventRemoteDataSource.createSleepEvent(eventToSync);
+      // Push event using the canonical caregiver_id already in SQLite
+      final pushResult = await _eventRemoteDataSource.createSleepEvent(event);
 
       if (pushResult.isSuccess) {
         final now = DateTime.now().toUtc();
@@ -644,47 +601,124 @@ class LayeredSyncOrchestrator {
     ));
   }
 
-  /// Syncs caregiver after baby push
+  // ========== CANONICALIZATION (Post-Baby-Push) ==========
+  //
+  // After pushing a baby, the Supabase trigger creates the first owner caregiver
+  // with a server-generated UUID. This differs from the local UUID.
+  // We must canonicalize (align) local IDs with remote IDs so that:
+  // 1. sleep_events reference the canonical (remote) caregiver_id
+  // 2. Future pushes don't need per-event ID mapping
+  //
+  // The canonicalization is transactional in SQLite: it updates all sleep_events
+  // and swaps/merges the caregiver PK in one atomic operation.
+
+  /// Syncs caregiver after baby push - with retry/backoff and canonicalization
   /// 
   /// The backend trigger creates the first caregiver automatically.
   /// We need to:
-  /// 1. Mark the local caregiver as synced
-  /// 2. (Future) Could update local ID to match remote, but for MVP we just mark synced
+  /// 1. Fetch the remote caregiver (with retry if trigger is slow)
+  /// 2. Canonicalize local caregiver ID to match remote ID
+  /// 3. Update all local sleep_events to reference the canonical ID
   Future<void> _syncCaregiverAfterBabyPush(String babyId, String userId, DateTime now) async {
-    // Find the local caregiver for this baby/user
-    final localCaregiversResult = await _caregiverLocalDataSource.getCaregiversForBaby(babyId);
-    if (localCaregiversResult.isError) {
+    // ignore: avoid_print
+    print('[Canonicalize] Starting post-baby-push canonicalization for '
+        'babyId=$babyId, userId=$userId');
+
+    // Step 1: Fetch remote owner caregiver with retry/backoff
+    final remoteOwnerId = await _fetchRemoteOwnerCaregiverIdWithRetry(babyId, userId);
+    
+    if (remoteOwnerId == null) {
+      // Failed to get remote caregiver after retries
+      // Don't corrupt state - just skip canonicalization
+      // Events will use the workaround path (if still present) or fail with clear error
       // ignore: avoid_print
-      print('[LayeredSync] Failed to get local caregivers: ${localCaregiversResult.failureOrNull}');
+      print('[Canonicalize] SKIPPED: Could not fetch remote owner caregiver after retries. '
+          'babyId=$babyId, userId=$userId');
       return;
     }
 
-    final localCaregivers = localCaregiversResult.dataOrNull ?? [];
-    final ownerCaregiver = localCaregivers.where((c) => c.role == 'owner' && c.userId == userId).firstOrNull;
+    // Step 2: Canonicalize local caregiver ID to match remote
+    final canonResult = await _caregiverLocalDataSource.canonicalizeOwnerCaregiverId(
+      babyId: babyId,
+      userId: userId,
+      remoteCaregiverId: remoteOwnerId,
+      nowUtc: now,
+    );
 
-    if (ownerCaregiver != null) {
-      // Mark the local caregiver as synced
-      // Note: The remote caregiver has a different ID (created by trigger)
-      // For MVP, we just mark synced. The sleep event push will handle ID mapping.
-      await _caregiverLocalDataSource.markCaregiverSynced(ownerCaregiver.id, now);
+    if (canonResult.isError) {
+      // Canonicalization failed - log but don't crash
       // ignore: avoid_print
-      print('[LayeredSync] Marked owner caregiver as synced after baby push: ${ownerCaregiver.id}');
+      print('[Canonicalize] ERROR: ${canonResult.failureOrNull?.message}');
+      return;
     }
+
+    final result = canonResult.dataOrNull!;
+    // ignore: avoid_print
+    print('[Canonicalize] COMPLETE: babyId=$babyId, '
+        'localOwnerId=${result.localOwnerId}, remoteOwnerId=$remoteOwnerId, '
+        'strategy=${result.strategy}, eventsUpdated=${result.eventsUpdated}, '
+        'caregiverUpdated=${result.caregiverUpdated}, caregiverDeleted=${result.caregiverDeleted}'
+        '${result.warning != null ? ", warning=${result.warning}" : ""}');
   }
 
-  /// Gets the remote caregiver ID for a user/baby combination
+  /// Fetches the remote owner caregiver ID with retry and exponential backoff
   /// 
-  /// This is needed because the local caregiver ID differs from the remote one
-  /// (backend trigger creates caregiver with its own UUID)
-  Future<String?> _getRemoteCaregiverId(String babyId, String userId) async {
-    final result = await _caregiverRemoteDataSource.getCaregiversForBaby(babyId);
-    if (result.isError) {
-      return null;
+  /// Retries: 200ms, 500ms, 1s (total 3 attempts)
+  /// Returns null if all attempts fail (caller should handle gracefully)
+  Future<String?> _fetchRemoteOwnerCaregiverIdWithRetry(String babyId, String userId) async {
+    const delays = [
+      Duration(milliseconds: 200),
+      Duration(milliseconds: 500),
+      Duration(milliseconds: 1000),
+    ];
+
+    for (var attempt = 0; attempt <= delays.length; attempt++) {
+      final result = await _caregiverRemoteDataSource.getCaregiversForBaby(babyId);
+
+      if (result.isSuccess) {
+        final caregivers = result.dataOrNull ?? [];
+        final ownerCaregiver = caregivers
+            .where((c) => c.userId == userId && c.role == 'owner')
+            .firstOrNull;
+
+        if (ownerCaregiver != null) {
+          // ignore: avoid_print
+          print('[Canonicalize] Found remote owner caregiver on attempt ${attempt + 1}: '
+              'id=${ownerCaregiver.id}');
+          return ownerCaregiver.id;
+        }
+
+        // Owner not found yet (trigger may be slow)
+        if (attempt < delays.length) {
+          // ignore: avoid_print
+          print('[Canonicalize] Remote owner caregiver not found, '
+              'retry ${attempt + 1}/${delays.length} in ${delays[attempt].inMilliseconds}ms');
+          await Future.delayed(delays[attempt]);
+        }
+      } else {
+        // Network or other error
+        final failure = result.failureOrNull!;
+        if (failure is NetworkFailure) {
+          // ignore: avoid_print
+          print('[Canonicalize] Network error fetching remote caregiver, '
+              'attempt ${attempt + 1}/${delays.length + 1}: ${failure.message}');
+          if (attempt < delays.length) {
+            await Future.delayed(delays[attempt]);
+          }
+        } else {
+          // Permanent error - don't retry
+          // ignore: avoid_print
+          print('[Canonicalize] Permanent error fetching remote caregiver: ${failure.message}');
+          return null;
+        }
+      }
     }
-    
-    final caregivers = result.dataOrNull ?? [];
-    final userCaregiver = caregivers.where((c) => c.userId == userId).firstOrNull;
-    return userCaregiver?.id;
+
+    // All retries exhausted
+    // ignore: avoid_print
+    print('[Canonicalize] FAILED: Could not fetch remote owner caregiver after '
+        '${delays.length + 1} attempts. babyId=$babyId, userId=$userId');
+    return null;
   }
 
   /// Classifies failure into sync error type

@@ -44,5 +44,26 @@ abstract class BabyLocalDataSource {
   /// [babyId] - The baby ID to check
   /// Returns true if baby has been synced to remote
   Future<Result<bool, Failure>> isBabySynced(String babyId);
+
+  // ========== PULL METHODS (Global Pull) ==========
+
+  /// Upserts babies from remote into local SQLite
+  /// 
+  /// Used by pullBabiesGlobal() to populate SQLite with remote babies
+  /// Returns the number of babies upserted (for logging)
+  /// 
+  /// Marks all upserted babies as synced (synced_at = now)
+  Future<Result<BabyUpsertResult, Failure>> upsertBabiesFromRemote(List<BabyModel> babies);
+}
+
+/// Result of baby upsert operation (for logging counts)
+class BabyUpsertResult {
+  /// Number of babies upserted (inserted or updated)
+  final int babiesUpserted;
+
+  const BabyUpsertResult({required this.babiesUpserted});
+
+  @override
+  String toString() => 'BabyUpsertResult(babiesUpserted: $babiesUpserted)';
 }
 

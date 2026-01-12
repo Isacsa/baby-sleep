@@ -88,6 +88,9 @@ class PullStrategyImpl {
       return Error(upsertResult.failureOrNull!);
     }
 
+    // ignore: avoid_print
+    print('[PullStrategy] pullEventsForBaby: babyId=$babyId, eventsFetched=${remoteEvents.length}');
+
     // Find the latest created_at from received events
     DateTime? latestCreatedAt;
     for (final event in remoteEvents) {

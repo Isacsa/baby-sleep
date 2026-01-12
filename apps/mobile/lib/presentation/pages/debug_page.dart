@@ -423,7 +423,9 @@ class DebugPage extends ConsumerWidget {
     final activeBaby = ref.watch(activeBabyProvider);
     final user = ref.watch(authProvider);
     
-    final canSync = user != null && activeBaby != null;
+    final isAuthenticated = user != null;
+    final hasActiveBaby = activeBaby != null;
+    final isSyncing = syncState.status == SyncStatus.syncing;
     
     return _SectionCard(
       title: 'Sync',
@@ -439,34 +441,85 @@ class DebugPage extends ConsumerWidget {
           Text('Error: ${syncState.errorMessage}',
             style: const TextStyle(color: Colors.red),
           ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
+        
+        // PUSH section
+        Text('Push (requires auth + active baby)',
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
+        ElevatedButton.icon(
+          onPressed: isAuthenticated && hasActiveBaby && !isSyncing
+              ? () => ref.read(syncProvider.notifier).pushForBaby(activeBaby.id)
+              : null,
+          icon: const Icon(Icons.cloud_upload),
+          label: const Text('Push Active Baby'),
+        ),
+        const SizedBox(height: 12),
+        
+        // PULL section - split into Global and Active Baby
+        Text('Pull (global = only auth, active baby = auth + baby)',
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 4),
         Row(
           children: [
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: canSync && syncState.status != SyncStatus.syncing
-                    ? () => ref.read(syncProvider.notifier).pushForBaby(activeBaby.id)
+                onPressed: isAuthenticated && !isSyncing
+                    ? () async {
+                        await ref.read(syncProvider.notifier).pullBabiesGlobal();
+                        // Refresh babies after pull
+                        ref.read(babiesNotifierProvider.notifier).refresh();
+                      }
                     : null,
-                icon: const Icon(Icons.cloud_upload),
-                label: const Text('Push'),
+                icon: const Icon(Icons.cloud_download),
+                label: const Text('Babies (Global)'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade100,
+                ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: ElevatedButton.icon(
-                onPressed: canSync && syncState.status != SyncStatus.syncing
+                onPressed: isAuthenticated && hasActiveBaby && !isSyncing
                     ? () async {
-                        await ref.read(syncProvider.notifier).pullForBaby(activeBaby.id);
-                        // Refresh events after pull
+                        await ref.read(syncProvider.notifier).pullActiveBabyData(activeBaby.id);
+                        // Refresh caregivers and events after pull
+                        ref.read(caregiversNotifierProvider.notifier).refresh();
                         ref.read(sleepEventsNotifierProvider.notifier).refresh();
                       }
                     : null,
                 icon: const Icon(Icons.cloud_download),
-                label: const Text('Pull'),
+                label: const Text('Active Baby'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green.shade100,
+                ),
               ),
             ),
           ],
         ),
+        if (!isAuthenticated)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              'Login to enable sync',
+              style: TextStyle(fontSize: 12, color: Colors.orange),
+            ),
+          ),
+        if (isAuthenticated && !hasActiveBaby)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+              'Pull Babies first, then select one to enable Active Baby sync',
+              style: TextStyle(fontSize: 12, color: Colors.orange),
+            ),
+          ),
         const SizedBox(height: 8),
         ElevatedButton(
           onPressed: () => ref.read(syncProvider.notifier).reset(),

@@ -159,5 +159,44 @@ class BabyLocalDataSourceImpl implements BabyLocalDataSource {
       return Error(StorageFailure('Failed to check baby sync status: $e', originalError: e));
     }
   }
+
+  // ========== PULL METHODS (Global Pull) ==========
+
+  @override
+  Future<Result<BabyUpsertResult, Failure>> upsertBabiesFromRemote(List<BabyModel> babies) async {
+    if (babies.isEmpty) {
+      return const Success(BabyUpsertResult(babiesUpserted: 0));
+    }
+
+    try {
+      final db = await _localDatabase.database;
+      final now = DateTime.now().toUtc().toIso8601String();
+      final batch = db.batch();
+
+      for (final baby in babies) {
+        // Mark as synced since they come from remote
+        final babyWithSyncedAt = {
+          ...baby.toJson(),
+          'synced_at': now,
+        };
+        batch.insert(
+          'babies',
+          babyWithSyncedAt,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      // Commit with results to get count
+      final results = await batch.commit(noResult: false);
+      final upsertedCount = results.length;
+
+      // ignore: avoid_print
+      print('[BabyLocalDS] upsertBabiesFromRemote: babiesUpserted=$upsertedCount');
+
+      return Success(BabyUpsertResult(babiesUpserted: upsertedCount));
+    } catch (e) {
+      return Error(StorageFailure('Failed to upsert babies from remote: $e', originalError: e));
+    }
+  }
 }
 

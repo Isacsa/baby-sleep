@@ -24,7 +24,7 @@ PushStrategyImpl
 
 ### 1. Create `.env` file
 
-Create a `.env` file in the project root with your Supabase credentials:
+Create a `.env` file in `apps/mobile/` (the Flutter project root) with your Supabase credentials:
 
 ```
 SUPABASE_URL=https://your-project.supabase.co

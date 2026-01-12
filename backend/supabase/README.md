@@ -63,15 +63,39 @@ Todas as tabelas têm Row Level Security (RLS) ativado. Acesso é sempre avaliad
 
 ### Usando Supabase CLI (Recomendado)
 
+> **Nota:** Este projeto está organizado em monorepo. As migrations estão em `backend/supabase/`.
+
+**Opção 1: Usar script wrapper (recomendado)**
 ```bash
-# Navegar para raiz do projeto
-cd /path/to/baby-sleep
+# Da raiz do monorepo
+./scripts/apply-migrations.sh
+```
+
+**Opção 2: Navegar para o diretório**
+```bash
+# Navegar para backend/supabase
+cd /path/to/baby-sleep/backend/supabase
 
 # Ligar ao projeto Supabase (se ainda não ligado)
 supabase link --project-ref your-project-ref
 
 # Aplicar migrações ao remoto
 supabase db push
+```
+
+**Opção 3: Usar flags explícitos (sem config.toml)**
+```bash
+# Se não tiver config.toml, usar flags diretamente
+supabase db push --project-ref your-project-ref --db-url postgresql://...
+```
+
+### Nota sobre config.toml
+
+Este projeto não inclui `config.toml` por padrão. Se preferires usar o Supabase CLI com configuração local:
+```bash
+cd backend/supabase
+supabase init  # Gera config.toml
+supabase link --project-ref your-project-ref
 ```
 
 ### Usando Supabase Dashboard
