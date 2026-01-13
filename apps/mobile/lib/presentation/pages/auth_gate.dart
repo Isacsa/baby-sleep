@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:temp_flutter/application/providers/auth_provider.dart';
 import 'package:temp_flutter/application/providers/active_baby_provider.dart';
 import 'package:temp_flutter/application/providers/babies_provider.dart';
+import 'package:temp_flutter/presentation/widgets/starry_background.dart';
+import 'package:temp_flutter/presentation/theme/night_theme.dart';
 
 /// AuthGate - Entry point that decides where to navigate based on auth state
 /// 
@@ -33,14 +35,14 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
     // Show loading while checking initial state
     if (babiesAsync.isLoading) {
-      return const Scaffold(
-        body: Center(
+      return StarryScaffold(
+        body: const Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(),
+              CircularProgressIndicator(color: NightTheme.primary),
               SizedBox(height: 16),
-              Text('Loading...'),
+              Text('A carregar...', style: TextStyle(color: NightTheme.textSecondary)),
             ],
           ),
         ),
@@ -64,7 +66,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
         if (existsInCache) {
           // Active baby exists locally → Go to baby home
-          _navigateTo('/baby');
+          _navigateTo('/home');
         } else {
           // Active baby ID exists but not in SQLite cache
           // This happens on new device with persisted SharedPreferences
@@ -78,27 +80,26 @@ class _AuthGateState extends ConsumerState<AuthGate> {
     });
 
     // While deciding, show splash-like screen
-    return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.surface,
+    return StarryScaffold(
       body: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
+            const Icon(
               Icons.bedtime_rounded,
               size: 80,
-              color: Theme.of(context).colorScheme.primary,
+              color: NightTheme.primary,
             ),
             const SizedBox(height: 16),
             Text(
               'Baby Sleep',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
+                    color: NightTheme.primary,
                     fontWeight: FontWeight.w600,
                   ),
             ),
             const SizedBox(height: 32),
-            const CircularProgressIndicator(),
+            const CircularProgressIndicator(color: NightTheme.primary),
           ],
         ),
       ),

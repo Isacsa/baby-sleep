@@ -4,6 +4,7 @@ import 'package:temp_flutter/application/providers/active_baby_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/domain/entities/sleep_event.dart';
 import 'package:temp_flutter/presentation/widgets/empty_state.dart';
+import 'package:temp_flutter/presentation/widgets/starry_background.dart';
 
 /// TimelinePage - List of sleep events for the active baby
 /// 
@@ -17,9 +18,10 @@ class TimelinePage extends ConsumerWidget {
     final activeBaby = ref.watch(activeBabyProvider);
     final eventsAsync = ref.watch(sleepEventsNotifierProvider);
 
-    return Scaffold(
+    return StarryScaffold(
       appBar: AppBar(
-        title: Text(activeBaby != null ? '${activeBaby.name}\'s Timeline' : 'Timeline'),
+        backgroundColor: Colors.transparent,
+        title: Text(activeBaby != null ? 'Timeline de ${activeBaby.name}' : 'Timeline'),
         centerTitle: true,
       ),
       body: eventsAsync.when(
@@ -97,7 +99,7 @@ class _EventTile extends StatelessWidget {
                       width: 2,
                       color: isFirst
                           ? Colors.transparent
-                          : theme.colorScheme.outline.withOpacity(0.3),
+                          : theme.colorScheme.outline.withValues(alpha: 0.3),
                     ),
                   ),
                   // Dot
@@ -128,7 +130,7 @@ class _EventTile extends StatelessWidget {
                       width: 2,
                       color: isLast
                           ? Colors.transparent
-                          : theme.colorScheme.outline.withOpacity(0.3),
+                          : theme.colorScheme.outline.withValues(alpha: 0.3),
                     ),
                   ),
                 ],
@@ -145,7 +147,7 @@ class _EventTile extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                   border: event.isCorrected
                       ? Border.all(
-                          color: theme.colorScheme.error.withOpacity(0.3),
+                          color: theme.colorScheme.error.withValues(alpha: 0.3),
                           width: 1,
                         )
                       : null,

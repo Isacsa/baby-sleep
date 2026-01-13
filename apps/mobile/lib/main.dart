@@ -2,10 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:temp_flutter/data/datasources/remote/supabase_client_impl.dart';
+import 'package:temp_flutter/presentation/theme/night_theme.dart';
 import 'package:temp_flutter/presentation/pages/auth_gate.dart';
 import 'package:temp_flutter/presentation/pages/login_page.dart';
 import 'package:temp_flutter/presentation/pages/babies_page.dart';
-import 'package:temp_flutter/presentation/pages/baby_home_page.dart';
+import 'package:temp_flutter/presentation/pages/main_scaffold.dart';
+import 'package:temp_flutter/presentation/pages/day_detail_page.dart';
 import 'package:temp_flutter/presentation/pages/timeline_page.dart';
 import 'package:temp_flutter/presentation/pages/debug_page.dart';
 
@@ -39,47 +41,38 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Baby Sleep Monitor',
+      title: 'Baby Sleep',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6B5B95), // Soft purple
-          brightness: Brightness.light,
-        ),
-        useMaterial3: true,
-        // Typography with distinctive font
-        fontFamily: 'Quicksand',
-        textTheme: const TextTheme(
-          headlineLarge: TextStyle(fontWeight: FontWeight.w600),
-          headlineMedium: TextStyle(fontWeight: FontWeight.w600),
-          titleLarge: TextStyle(fontWeight: FontWeight.w600),
-          bodyLarge: TextStyle(fontWeight: FontWeight.w400),
-        ),
-      ),
-      darkTheme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF6B5B95),
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-        fontFamily: 'Quicksand',
-      ),
-      themeMode: ThemeMode.system,
+      
+      // Night Theme - conforme spec
+      theme: NightTheme.themeData,
+      darkTheme: NightTheme.themeData,
+      themeMode: ThemeMode.dark,
+      
       // AuthGate is the entry point - decides where to navigate
       home: const AuthGate(),
+      
       routes: {
         '/login': (context) => const LoginPage(),
         '/babies': (context) => const BabiesPage(),
-        '/baby': (context) => const BabyHomePage(),
+        '/home': (context) => const MainScaffold(),
+        '/day-detail': (context) => const DayDetailPage(),
         '/timeline': (context) => const TimelinePage(),
         // Debug route only in debug mode
         if (kDebugMode) '/debug': (context) => const DebugPage(),
       },
+      
       onGenerateRoute: (settings) {
         // Handle debug route access in release mode
         if (settings.name == '/debug' && !kDebugMode) {
           return MaterialPageRoute(
             builder: (context) => const AuthGate(),
+          );
+        }
+        // Redirect old /baby route to new /home
+        if (settings.name == '/baby') {
+          return MaterialPageRoute(
+            builder: (context) => const MainScaffold(),
           );
         }
         return null;

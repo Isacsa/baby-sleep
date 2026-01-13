@@ -13,6 +13,7 @@ import 'package:temp_flutter/application/providers/babies_provider.dart';
 import 'package:temp_flutter/application/providers/caregivers_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_state_provider.dart';
+import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
 
 part 'sync_provider.g.dart';
 
@@ -503,11 +504,64 @@ class Sync extends _$Sync {
   /// - caregiversNotifierProvider (may have swapped IDs after canonicalization)
   /// - sleepEventsNotifierProvider (events may have new caregiver_id references)
   /// - sleepStateNotifierProvider (derived from events, needs refresh)
+  /// - caregiverContextProvider (needs to re-verify after sync)
   void _invalidateAfterSync() {
     ref.invalidate(caregiversNotifierProvider);
     ref.invalidate(sleepEventsNotifierProvider);
     ref.invalidate(sleepStateNotifierProvider);
+    ref.invalidate(caregiverContextProvider);
     // ignore: avoid_print
     print('[SyncProvider] Invalidated provider caches after sync');
+  }
+
+  // ========== PULL CAREGIVERS ONLY ==========
+  //
+  // Lightweight pull that only fetches caregivers (not events).
+  // Used by ensureCaregiverContext when we only need to verify permissions.
+
+  /// Pulls only caregivers for a specific baby (no events)
+  /// 
+  /// Lighter than pullActiveBabyData - useful for verifying permissions
+  /// without pulling the full event history.
+  /// 
+  /// Returns true if successful, false if failed.
+  Future<bool> pullCaregiversOnly(String babyId) async {
+    final caregiverRemoteDataSource = CaregiverRemoteDataSourceImpl();
+    final caregiverLocalDataSource = CaregiverLocalDataSourceImpl();
+
+    // ignore: avoid_print
+    print('[SyncProvider] pullCaregiversOnly: babyId=$babyId');
+
+    // Fetch caregivers from remote
+    final fetchResult = await caregiverRemoteDataSource.getCaregiversForBaby(babyId);
+
+    if (fetchResult.isError) {
+      // ignore: avoid_print
+      print('[SyncProvider] pullCaregiversOnly FAILED: ${fetchResult.failureOrNull?.message}');
+      return false;
+    }
+
+    final remoteCaregivers = fetchResult.dataOrNull ?? [];
+    // ignore: avoid_print
+    print('[SyncProvider] pullCaregiversOnly: fetched ${remoteCaregivers.length} caregivers');
+
+    if (remoteCaregivers.isEmpty) {
+      return true; // Success but no caregivers (user may not be caregiver)
+    }
+
+    // Upsert into SQLite
+    final upsertResult = await caregiverLocalDataSource.upsertCaregiversFromRemote(remoteCaregivers);
+
+    if (upsertResult.isSuccess) {
+      // ignore: avoid_print
+      print('[SyncProvider] pullCaregiversOnly: upserted ${upsertResult.dataOrNull!.caregiversUpserted} caregivers');
+      ref.invalidate(caregiversNotifierProvider);
+      ref.invalidate(caregiverContextProvider);
+      return true;
+    } else {
+      // ignore: avoid_print
+      print('[SyncProvider] pullCaregiversOnly FAILED (upsert): ${upsertResult.failureOrNull?.message}');
+      return false;
+    }
   }
 }

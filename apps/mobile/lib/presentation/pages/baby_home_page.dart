@@ -5,6 +5,7 @@ import 'package:temp_flutter/application/providers/active_baby_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_state_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/application/providers/sync_provider.dart';
+import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
 import 'package:temp_flutter/presentation/widgets/sync_status_chip.dart';
 import 'package:temp_flutter/presentation/widgets/primary_sleep_action_button.dart';
 import 'package:temp_flutter/sync/sync_state.dart';
@@ -18,6 +19,12 @@ import 'package:temp_flutter/sync/sync_state.dart';
 /// - Sync status chip
 /// - Sync now button (uses syncNowForBaby - Guardrail 2)
 /// - Link to timeline
+/// 
+/// CAREGIVER CONTEXT:
+/// - On init, ensures caregiver context exists (local or pull from remote)
+/// - Shows loading state while verifying permissions
+/// - Shows clear error/CTA if offline without caregiver
+/// - Start/End buttons disabled until caregiver context is ready
 class BabyHomePage extends ConsumerStatefulWidget {
   const BabyHomePage({super.key});
 
@@ -29,12 +36,26 @@ class _BabyHomePageState extends ConsumerState<BabyHomePage> {
   bool _isActionLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Ensure caregiver context on init
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ensureCaregiverContext();
+    });
+  }
+
+  Future<void> _ensureCaregiverContext() async {
+    await ref.read(caregiverContextProvider.notifier).ensureContext();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final activeBaby = ref.watch(activeBabyProvider);
     final sleepState = ref.watch(sleepStateNotifierProvider);
     final eventsAsync = ref.watch(sleepEventsNotifierProvider);
     final syncState = ref.watch(syncProvider);
+    final caregiverContext = ref.watch(caregiverContextProvider);
 
     // Safety check - should not happen if AuthGate works correctly
     if (activeBaby == null) {
@@ -50,6 +71,15 @@ class _BabyHomePageState extends ConsumerState<BabyHomePage> {
     final lastEvent = eventsAsync.value?.isNotEmpty == true
         ? eventsAsync.value!.first
         : null;
+
+    // Determine if Start/End is enabled based on caregiver context
+    final (canCreateEvents, contextMessage) = switch (caregiverContext) {
+      CaregiverContextReady() => (true, null),
+      CaregiverContextLoading() => (false, null),
+      CaregiverContextInitial() => (false, null),
+      CaregiverContextOfflineNoCaregiver(:final message) => (false, message),
+      CaregiverContextError(:final message) => (false, message),
+    };
 
     return Scaffold(
       appBar: AppBar(
@@ -154,8 +184,11 @@ class _BabyHomePageState extends ConsumerState<BabyHomePage> {
                 ),
               ),
 
+              // Caregiver context status (loading or error)
+              _buildCaregiverContextStatus(theme, caregiverContext),
+
               // Error message if sync failed
-              if (syncState.errorMessage != null)
+              if (syncState.errorMessage != null && contextMessage == null)
                 Container(
                   margin: const EdgeInsets.only(bottom: 16),
                   padding: const EdgeInsets.all(12),
@@ -183,9 +216,23 @@ class _BabyHomePageState extends ConsumerState<BabyHomePage> {
               // Primary action button
               PrimarySleepActionButton(
                 sleepState: sleepState,
-                isLoading: _isActionLoading,
-                onPressed: _handleSleepAction,
+                isLoading: _isActionLoading || caregiverContext is CaregiverContextLoading,
+                onPressed: canCreateEvents ? _handleSleepAction : null,
               ),
+              
+              // Disabled reason text (if button is disabled but not loading)
+              if (!canCreateEvents && caregiverContext is! CaregiverContextLoading)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    contextMessage ?? 'A verificar permissões...',
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.error,
+                    ),
+                  ),
+                ),
+              
               const SizedBox(height: 16),
 
               // Secondary actions row
@@ -230,6 +277,107 @@ class _BabyHomePageState extends ConsumerState<BabyHomePage> {
     );
   }
 
+  Widget _buildCaregiverContextStatus(ThemeData theme, CaregiverContextState state) {
+    return switch (state) {
+      CaregiverContextLoading() => Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.primaryContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: theme.colorScheme.onPrimaryContainer,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'A preparar permissões...',
+                style: TextStyle(color: theme.colorScheme.onPrimaryContainer),
+              ),
+            ],
+          ),
+        ),
+      CaregiverContextOfflineNoCaregiver(:final message) => Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.errorContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.wifi_off, color: theme.colorScheme.onErrorContainer),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: _ensureCaregiverContext,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Tentar novamente'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: theme.colorScheme.error,
+                  foregroundColor: theme.colorScheme.onError,
+                ),
+              ),
+            ],
+          ),
+        ),
+      CaregiverContextError(:final message) => Container(
+          margin: const EdgeInsets.only(bottom: 16),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: theme.colorScheme.errorContainer,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.error_outline, color: theme.colorScheme.onErrorContainer),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      message,
+                      style: TextStyle(color: theme.colorScheme.onErrorContainer),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              FilledButton.icon(
+                onPressed: _ensureCaregiverContext,
+                icon: const Icon(Icons.refresh),
+                label: const Text('Tentar novamente'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: theme.colorScheme.error,
+                  foregroundColor: theme.colorScheme.onError,
+                ),
+              ),
+            ],
+          ),
+        ),
+      _ => const SizedBox.shrink(), // Ready or Initial
+    };
+  }
+
   Widget _buildDuration(DateTime start, ThemeData theme) {
     final now = DateTime.now();
     final duration = now.difference(start);
@@ -266,6 +414,28 @@ class _BabyHomePageState extends ConsumerState<BabyHomePage> {
       } else {
         await ref.read(sleepEventsNotifierProvider.notifier).createSleepStart();
       }
+    } catch (e) {
+      // Show error message in SnackBar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text(e.toString())),
+              ],
+            ),
+            backgroundColor: Theme.of(context).colorScheme.error,
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Retry',
+              textColor: Colors.white,
+              onPressed: _handleSleepAction,
+            ),
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() => _isActionLoading = false);
@@ -280,6 +450,9 @@ class _BabyHomePageState extends ConsumerState<BabyHomePage> {
 
     // Use the single syncNowForBaby method (Guardrail 2)
     await ref.read(syncProvider.notifier).syncNowForBaby(activeBaby.id);
+    
+    // Re-verify caregiver context after sync
+    await _ensureCaregiverContext();
   }
 
   void _showSyncDetails(BuildContext context, SyncState syncState) {

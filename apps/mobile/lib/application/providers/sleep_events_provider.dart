@@ -109,18 +109,22 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     state = AsyncData([event, ...currentEvents]);
   }
 
-  /// Creates a SleepStart event (offline-first)
+  /// Internal helper for creating SleepStart events
   /// 
-  /// Preconditions (checked in UI, validated in use case):
-  /// - User is authenticated
-  /// - Active baby is selected
-  /// - User has write permission (owner/editor)
-  Future<void> createSleepStart() async {
+  /// Validates preconditions and creates the event at the given timestamp.
+  /// Used by both createSleepStart() and createSleepStartAt().
+  /// 
+  /// Throws [SleepEventException] if creation fails (e.g., no caregiver permission).
+  Future<void> _createSleepStartInternal(DateTime timestamp) async {
     final user = ref.read(authProvider);
     final activeBaby = ref.read(activeBabyProvider);
     
-    if (user == null || activeBaby == null) {
-      return;
+    if (user == null) {
+      throw const SleepEventException('Utilizador não autenticado');
+    }
+    
+    if (activeBaby == null) {
+      throw const SleepEventException('Nenhum bebé selecionado');
     }
     
     final now = DateTime.now().toUtc();
@@ -129,7 +133,7 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     
     final result = await _createSleepStartUseCase.execute(
       babyId: activeBaby.id,
-      timestamp: now,
+      timestamp: timestamp.toUtc(),
       userId: user.id,
       eventId: eventId,
       deviceId: deviceId,
@@ -140,9 +144,32 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
       case domain.DomainSuccess(:final data):
         addEvent(data);
       case domain.DomainError(:final failure):
-        // ignore: avoid_print
-        print('Error creating SleepStart: ${failure.message}');
+        throw SleepEventException(failure.message);
     }
+  }
+
+  /// Creates a SleepStart event (offline-first)
+  /// 
+  /// Preconditions (checked in UI, validated in use case):
+  /// - User is authenticated
+  /// - Active baby is selected
+  /// - User has write permission (owner/editor)
+  /// 
+  /// Throws [SleepEventException] if creation fails (e.g., no caregiver permission).
+  /// UI should catch this and display error message.
+  Future<void> createSleepStart() async {
+    await _createSleepStartInternal(DateTime.now().toUtc());
+  }
+
+  /// Creates a SleepStart event at a specific time (for quick chips)
+  /// 
+  /// Same as createSleepStart but with a custom timestamp
+  /// Used for "Started 5/10/15 min ago" and "Outra hora" features
+  /// 
+  /// Throws [SleepEventException] if creation fails (e.g., no caregiver permission).
+  /// UI should catch this and display error message.
+  Future<void> createSleepStartAt(DateTime timestamp) async {
+    await _createSleepStartInternal(timestamp);
   }
 
   /// Creates a SleepEnd event (offline-first)
@@ -151,12 +178,19 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
   /// - User is authenticated
   /// - Active baby is selected
   /// - User has write permission (owner/editor)
+  /// 
+  /// Throws [SleepEventException] if creation fails (e.g., no caregiver permission).
+  /// UI should catch this and display error message.
   Future<void> createSleepEnd() async {
     final user = ref.read(authProvider);
     final activeBaby = ref.read(activeBabyProvider);
     
-    if (user == null || activeBaby == null) {
-      return;
+    if (user == null) {
+      throw const SleepEventException('Utilizador não autenticado');
+    }
+    
+    if (activeBaby == null) {
+      throw const SleepEventException('Nenhum bebé selecionado');
     }
     
     final now = DateTime.now().toUtc();
@@ -176,8 +210,16 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
       case domain.DomainSuccess(:final data):
         addEvent(data);
       case domain.DomainError(:final failure):
-        // ignore: avoid_print
-        print('Error creating SleepEnd: ${failure.message}');
+        throw SleepEventException(failure.message);
     }
   }
+}
+
+/// Exception thrown when sleep event creation fails
+class SleepEventException implements Exception {
+  final String message;
+  const SleepEventException(this.message);
+  
+  @override
+  String toString() => message;
 }

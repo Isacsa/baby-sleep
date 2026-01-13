@@ -23,7 +23,7 @@ class BabyListTile extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       color: isActive
-          ? theme.colorScheme.primaryContainer.withOpacity(0.5)
+          ? theme.colorScheme.primaryContainer.withValues(alpha: 0.5)
           : theme.colorScheme.surfaceContainerHighest,
       elevation: isActive ? 2 : 0,
       child: InkWell(
@@ -38,7 +38,7 @@ class BabyListTile extends StatelessWidget {
                 radius: 24,
                 backgroundColor: isActive
                     ? theme.colorScheme.primary
-                    : theme.colorScheme.outline.withOpacity(0.3),
+                    : theme.colorScheme.outline.withValues(alpha: 0.3),
                 child: Icon(
                   Icons.child_care,
                   color: isActive

@@ -5,10 +5,12 @@ import 'package:temp_flutter/application/providers/auth_provider.dart';
 import 'package:temp_flutter/application/providers/babies_provider.dart';
 import 'package:temp_flutter/application/providers/active_baby_provider.dart';
 import 'package:temp_flutter/application/providers/sync_provider.dart';
+import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
 import 'package:temp_flutter/presentation/widgets/baby_list_tile.dart';
 import 'package:temp_flutter/presentation/widgets/empty_state.dart';
 import 'package:temp_flutter/presentation/widgets/sync_status_chip.dart';
 import 'package:temp_flutter/sync/sync_state.dart';
+import 'package:temp_flutter/presentation/widgets/starry_background.dart';
 
 /// BabiesPage - List and manage babies
 /// 
@@ -43,9 +45,10 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
     final babiesAsync = ref.watch(babiesNotifierProvider);
     final syncState = ref.watch(syncProvider);
 
-    return Scaffold(
+    return StarryScaffold(
       appBar: AppBar(
-        title: const Text('My Babies'),
+        backgroundColor: Colors.transparent,
+        title: const Text('Os meus bebés'),
         centerTitle: true,
         actions: [
           // Sync status
@@ -82,77 +85,79 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Pull Babies button - always available with auth (Guardrail 3)
-          if (user != null)
-            Container(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.tonalIcon(
-                      onPressed: syncState.status == SyncStatus.syncing
-                          ? null
-                          : _pullBabiesGlobal,
-                      icon: const Icon(Icons.cloud_download),
-                      label: const Text('Pull Babies (Global)'),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Pull Babies button - always available with auth (Guardrail 3)
+            if (user != null)
+              Container(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: FilledButton.tonalIcon(
+                        onPressed: syncState.status == SyncStatus.syncing
+                            ? null
+                            : _pullBabiesGlobal,
+                        icon: const Icon(Icons.cloud_download),
+                        label: const Text('Pull Babies (Global)'),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  FilledButton.icon(
-                    onPressed: () => _showCreateBabyDialog(context),
-                    icon: const Icon(Icons.add),
-                    label: const Text('New'),
-                  ),
-                ],
+                    const SizedBox(width: 12),
+                    FilledButton.icon(
+                      onPressed: () => _showCreateBabyDialog(context),
+                      icon: const Icon(Icons.add),
+                      label: const Text('New'),
+                    ),
+                  ],
+                ),
               ),
-            ),
-
-          // Babies list
-          Expanded(
-            child: babiesAsync.when(
-              loading: () => const Center(child: CircularProgressIndicator()),
-              error: (e, _) => EmptyState(
-                icon: Icons.error_outline,
-                title: 'Error loading babies',
-                subtitle: e.toString(),
-              ),
-              data: (babies) {
-                if (babies.isEmpty) {
-                  return EmptyState(
-                    icon: Icons.child_care,
-                    title: 'No babies yet',
-                    subtitle: 'On a new device? Pull babies from cloud.\n'
-                        'Or create your first baby locally.',
-                    ctaLabel: 'Pull Babies',
-                    onCtaPressed: user != null ? _pullBabiesGlobal : null,
-                  );
-                }
-
-                return RefreshIndicator(
-                  onRefresh: () async {
-                    await ref.read(babiesNotifierProvider.notifier).refresh();
-                  },
-                  child: ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 100),
-                    itemCount: babies.length,
-                    itemBuilder: (context, index) {
-                      final baby = babies[index];
-                      final isActive = activeBaby?.id == baby.id;
-
-                      return BabyListTile(
-                        baby: baby,
-                        isActive: isActive,
-                        onTap: () => _selectBaby(baby),
-                      );
+  
+            // Babies list
+            Expanded(
+              child: babiesAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (e, _) => EmptyState(
+                  icon: Icons.error_outline,
+                  title: 'Error loading babies',
+                  subtitle: e.toString(),
+                ),
+                data: (babies) {
+                  if (babies.isEmpty) {
+                    return EmptyState(
+                      icon: Icons.child_care,
+                      title: 'Ainda sem bebés',
+                      subtitle: 'Novo dispositivo? Puxa os bebés da cloud.\n'
+                          'Ou cria o teu primeiro bebé localmente.',
+                      ctaLabel: 'Puxar Bebés',
+                      onCtaPressed: user != null ? _pullBabiesGlobal : null,
+                    );
+                  }
+  
+                  return RefreshIndicator(
+                    onRefresh: () async {
+                      await ref.read(babiesNotifierProvider.notifier).refresh();
                     },
-                  ),
-                );
-              },
+                    child: ListView.builder(
+                      padding: const EdgeInsets.only(bottom: 100),
+                      itemCount: babies.length,
+                      itemBuilder: (context, index) {
+                        final baby = babies[index];
+                        final isActive = activeBaby?.id == baby.id;
+  
+                        return BabyListTile(
+                          baby: baby,
+                          isActive: isActive,
+                          onTap: () => _selectBaby(baby),
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -166,9 +171,18 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
   }
 
   void _selectBaby(dynamic baby) async {
+    // Clear caregiver context cache before changing baby
+    ref.read(caregiverContextProvider.notifier).clearCache();
+    
+    // Set active baby
     await ref.read(activeBabyProvider.notifier).setBaby(baby);
+    
+    // Pre-trigger caregiver context verification
+    // (BabyHomePage will also call this in initState, but we start early)
+    ref.read(caregiverContextProvider.notifier).ensureContext();
+    
     if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/baby');
+      Navigator.of(context).pushReplacementNamed('/home');
     }
   }
 

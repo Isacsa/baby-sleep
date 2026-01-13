@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:temp_flutter/application/providers/auth_provider.dart';
+import 'package:temp_flutter/presentation/widgets/starry_background.dart';
+import 'package:temp_flutter/presentation/theme/night_theme.dart';
 
 /// LoginPage - Simple magic link authentication
 /// 
@@ -42,7 +44,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       });
     }
 
-    return Scaffold(
+    return StarryScaffold(
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -52,24 +54,24 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Logo/Header
-                Icon(
+                const Icon(
                   Icons.bedtime_rounded,
                   size: 80,
-                  color: theme.colorScheme.primary,
+                  color: NightTheme.primary,
                 ),
                 const SizedBox(height: 16),
                 Text(
                   'Baby Sleep',
                   style: theme.textTheme.headlineLarge?.copyWith(
-                    color: theme.colorScheme.primary,
+                    color: NightTheme.primary,
                   ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Track your baby\'s sleep',
+                  'Regista o sono do teu bebé',
                   style: theme.textTheme.bodyLarge?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
+                    color: NightTheme.textSecondary,
                   ),
                   textAlign: TextAlign.center,
                 ),
