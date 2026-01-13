@@ -27,6 +27,8 @@ class CreateSleepEnd {
   /// [eventId] - Pre-generated UUID for the event (must be unique)
   /// [deviceId] - Device identifier string
   /// [createdAt] - When event was created locally (UTC)
+  /// [persist] - Whether to persist to repository (default: true)
+  ///             Set to false for validation-only in transactional flows.
   /// 
   /// Returns created event or failure
   Future<DomainResult<SleepEvent>> execute({
@@ -36,6 +38,7 @@ class CreateSleepEnd {
     required String eventId,
     required String deviceId,
     required DateTime createdAt,
+    bool persist = true,
   }) async {
     // Validate timestamp is UTC
     if (!timestamp.isUtc) {
@@ -60,8 +63,11 @@ class CreateSleepEnd {
       ));
     }
 
-    // Get current user's caregiver for this baby
-    final caregiverResult = await caregiverRepository.getCurrentUserCaregiverForBaby(babyId);
+    // Get user's caregiver for this baby (never use "first caregiver")
+    final caregiverResult = await caregiverRepository.getCaregiverForBabyAndUser(
+      babyId: babyId,
+      userId: userId,
+    );
     if (caregiverResult.isError) {
       return DomainError(caregiverResult.failureOrNull!);
     }
@@ -94,6 +100,11 @@ class CreateSleepEnd {
       correctedBy: null,
       metadata: null,
     );
+
+    // GUARDRAIL 2: Only persist if requested (for transactional flows)
+    if (!persist) {
+      return DomainSuccess(event);
+    }
 
     // Persist locally
     return await sleepEventRepository.createSleepEvent(event);

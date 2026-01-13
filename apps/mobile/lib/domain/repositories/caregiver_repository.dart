@@ -17,11 +17,16 @@ abstract class CaregiverRepository {
   /// Validates user has access via RLS
   Future<DomainResult<Caregiver?>> getCaregiverById(String caregiverId);
 
-  /// Gets current user's caregiver relationship for a baby
+  /// Gets caregiver relationship for a specific user and baby
   /// 
-  /// Returns caregiver where userId = current user
+  /// Returns caregiver where (babyId, userId) match
   /// Used to get caregiver_id for creating events
-  Future<DomainResult<Caregiver?>> getCurrentUserCaregiverForBaby(String babyId);
+  /// 
+  /// IMPORTANT: Always pass the actual userId, never assume "current user"
+  Future<DomainResult<Caregiver?>> getCaregiverForBabyAndUser({
+    required String babyId,
+    required String userId,
+  });
 
   /// Ensures a local owner caregiver exists for the given baby and user
   /// 

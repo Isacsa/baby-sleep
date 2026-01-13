@@ -45,22 +45,19 @@ class CaregiverRepositoryImpl implements CaregiverRepository {
   }
 
   @override
-  Future<DomainResult<Caregiver?>> getCurrentUserCaregiverForBaby(String babyId) async {
-    // Get all caregivers for baby
-    final caregiversResult = await getCaregiversForBaby(babyId);
+  Future<DomainResult<Caregiver?>> getCaregiverForBabyAndUser({
+    required String babyId,
+    required String userId,
+  }) async {
+    // Query directly by (babyId, userId) - never use "first caregiver"
+    final localResult = await localDataSource.getCaregiverByUserIdForBaby(
+      userId: userId,
+      babyId: babyId,
+    );
     
-    return switch (caregiversResult) {
-      DomainSuccess(:final data) => () {
-          // Find current user's caregiver
-          // Note: This requires current user ID, which should be injected
-          // For now, returning first caregiver (implementation detail)
-          // TODO: Inject current user ID to filter correctly
-          if (data.isEmpty) {
-            return const DomainSuccess<Caregiver?>(null);
-          }
-          return DomainSuccess<Caregiver?>(data.first);
-        }(),
-      DomainError(:final failure) => DomainError<Caregiver?>(failure),
+    return switch (localResult) {
+      core.Success(:final data) => DomainSuccess(data?.toDomain()),
+      core.Error(:final failure) => DomainError(ResultAdapter.failureToDomain(failure)),
     };
   }
 

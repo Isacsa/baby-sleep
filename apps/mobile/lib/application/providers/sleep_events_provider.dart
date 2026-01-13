@@ -8,6 +8,7 @@ import 'package:temp_flutter/data/repositories/sleep_event_repository_impl.dart'
 import 'package:temp_flutter/data/repositories/caregiver_repository_impl.dart';
 import 'package:temp_flutter/data/datasources/remote/sleep_event_remote_datasource_impl.dart';
 import 'package:temp_flutter/data/datasources/remote/caregiver_remote_datasource_impl.dart';
+import 'package:temp_flutter/data/models/sleep_event_model.dart';
 import 'package:temp_flutter/domain/use_cases/sleep/create_sleep_start.dart';
 import 'package:temp_flutter/domain/use_cases/sleep/create_sleep_end.dart';
 import 'package:temp_flutter/core/utils/uuid_generator.dart';
@@ -116,8 +117,14 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
   /// 
   /// Throws [SleepEventException] if creation fails (e.g., no caregiver permission).
   Future<void> _createSleepStartInternal(DateTime timestamp) async {
+    // ignore: avoid_print
+    print('[SleepEventsProvider] _createSleepStartInternal called with: $timestamp');
+    
     final user = ref.read(authProvider);
     final activeBaby = ref.read(activeBabyProvider);
+    
+    // ignore: avoid_print
+    print('[SleepEventsProvider] user=${user?.id}, baby=${activeBaby?.id}');
     
     if (user == null) {
       throw const SleepEventException('Utilizador não autenticado');
@@ -131,6 +138,9 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     final eventId = UuidGenerator.generate();
     final deviceId = await DeviceIdManager.getDeviceId();
     
+    // ignore: avoid_print
+    print('[SleepEventsProvider] Executing use case with timestamp=${timestamp.toUtc()}');
+    
     final result = await _createSleepStartUseCase.execute(
       babyId: activeBaby.id,
       timestamp: timestamp.toUtc(),
@@ -142,8 +152,12 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     
     switch (result) {
       case domain.DomainSuccess(:final data):
+        // ignore: avoid_print
+        print('[SleepEventsProvider] SleepStart created successfully: ${data.id}');
         addEvent(data);
       case domain.DomainError(:final failure):
+        // ignore: avoid_print
+        print('[SleepEventsProvider] SleepStart failed: ${failure.message}');
         throw SleepEventException(failure.message);
     }
   }
@@ -172,16 +186,13 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     await _createSleepStartInternal(timestamp);
   }
 
-  /// Creates a SleepEnd event (offline-first)
+  /// Internal helper for creating SleepEnd events
   /// 
-  /// Preconditions (checked in UI, validated in use case):
-  /// - User is authenticated
-  /// - Active baby is selected
-  /// - User has write permission (owner/editor)
+  /// Validates preconditions and creates the event at the given timestamp.
+  /// Used by both createSleepEnd() and createSleepEndAt().
   /// 
   /// Throws [SleepEventException] if creation fails (e.g., no caregiver permission).
-  /// UI should catch this and display error message.
-  Future<void> createSleepEnd() async {
+  Future<void> _createSleepEndInternal(DateTime timestamp) async {
     final user = ref.read(authProvider);
     final activeBaby = ref.read(activeBabyProvider);
     
@@ -199,7 +210,7 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     
     final result = await _createSleepEndUseCase.execute(
       babyId: activeBaby.id,
-      timestamp: now,
+      timestamp: timestamp.toUtc(),
       userId: user.id,
       eventId: eventId,
       deviceId: deviceId,
@@ -212,6 +223,153 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
       case domain.DomainError(:final failure):
         throw SleepEventException(failure.message);
     }
+  }
+
+  /// Creates a SleepEnd event (offline-first)
+  /// 
+  /// Preconditions (checked in UI, validated in use case):
+  /// - User is authenticated
+  /// - Active baby is selected
+  /// - User has write permission (owner/editor)
+  /// 
+  /// Throws [SleepEventException] if creation fails (e.g., no caregiver permission).
+  /// UI should catch this and display error message.
+  Future<void> createSleepEnd() async {
+    await _createSleepEndInternal(DateTime.now().toUtc());
+  }
+
+  /// Creates a SleepEnd event at a specific time (for retroactive logging)
+  /// 
+  /// Same as createSleepEnd but with a custom timestamp
+  /// Used for "Registar sono completo" feature
+  /// 
+  /// Throws [SleepEventException] if creation fails (e.g., no caregiver permission).
+  /// UI should catch this and display error message.
+  Future<void> createSleepEndAt(DateTime timestamp) async {
+    await _createSleepEndInternal(timestamp);
+  }
+
+  /// Creates a complete sleep session (both SleepStart and SleepEnd) atomically
+  /// 
+  /// GUARDRAIL 2: Uses real SQLite transaction - both events succeed or both fail.
+  /// This prevents orphaned SleepStart if SleepEnd creation fails.
+  /// 
+  /// Validates:
+  /// - end > start (order) in BOTH local and UTC
+  /// - Both timestamps converted to UTC before persistence
+  /// 
+  /// Throws [SleepEventException] if either creation fails.
+  Future<void> createSleepSession({
+    required DateTime startTime,
+    required DateTime endTime,
+  }) async {
+    // ignore: avoid_print
+    print('[SleepEventsProvider] createSleepSession: start=$startTime, end=$endTime');
+    
+    // Normalize timestamps to UTC first
+    final startUtc = startTime.toUtc();
+    final endUtc = endTime.toUtc();
+    
+    // GUARDRAIL 2: Validate order in both local AND UTC
+    if (!endTime.isAfter(startTime)) {
+      // ignore: avoid_print
+      print('[SleepEventsProvider] Error: end <= start (local)');
+      throw const SleepEventException('A hora de fim deve ser depois da hora de início');
+    }
+    
+    if (!endUtc.isAfter(startUtc)) {
+      // ignore: avoid_print
+      print('[SleepEventsProvider] Error: endUtc <= startUtc');
+      throw const SleepEventException('As horas ficaram inconsistentes. Confirma o dia do fim.');
+    }
+
+    final user = ref.read(authProvider);
+    final activeBaby = ref.read(activeBabyProvider);
+    
+    // ignore: avoid_print
+    print('[SleepEventsProvider] Session: user=${user?.id}, baby=${activeBaby?.id}');
+    
+    if (user == null) {
+      throw const SleepEventException('Utilizador não autenticado');
+    }
+    
+    if (activeBaby == null) {
+      throw const SleepEventException('Nenhum bebé selecionado');
+    }
+
+    final now = DateTime.now().toUtc();
+    final deviceId = await DeviceIdManager.getDeviceId();
+    
+    // Generate UUIDs for both events
+    final startEventId = UuidGenerator.generate();
+    final endEventId = UuidGenerator.generate();
+    
+    // ignore: avoid_print
+    print('[SleepEventsProvider] Validating Start event: $startEventId at $startUtc');
+
+    // STEP 1: Execute use cases with persist=false to VALIDATE only
+    final startResult = await _createSleepStartUseCase.execute(
+      babyId: activeBaby.id,
+      timestamp: startUtc,
+      userId: user.id,
+      eventId: startEventId,
+      deviceId: deviceId,
+      createdAt: now,
+      persist: false, // GUARDRAIL 2: validate only, don't persist yet
+    );
+    
+    if (startResult.isError) {
+      // ignore: avoid_print
+      print('[SleepEventsProvider] Start validation failed: ${startResult.failureOrNull!.message}');
+      throw SleepEventException(startResult.failureOrNull!.message);
+    }
+    
+    // ignore: avoid_print
+    print('[SleepEventsProvider] Validating End event: $endEventId at $endUtc');
+
+    final endResult = await _createSleepEndUseCase.execute(
+      babyId: activeBaby.id,
+      timestamp: endUtc,
+      userId: user.id,
+      eventId: endEventId,
+      deviceId: deviceId,
+      createdAt: now,
+      persist: false, // GUARDRAIL 2: validate only, don't persist yet
+    );
+    
+    if (endResult.isError) {
+      // ignore: avoid_print
+      print('[SleepEventsProvider] End validation failed: ${endResult.failureOrNull!.message}');
+      throw SleepEventException(endResult.failureOrNull!.message);
+    }
+
+    // STEP 2: Both validated - now persist ATOMICALLY in a single transaction
+    final startEvent = startResult.dataOrNull!;
+    final endEvent = endResult.dataOrNull!;
+    
+    // ignore: avoid_print
+    print('[SleepEventsProvider] Persisting both events in transaction...');
+    
+    final saveResult = await _localDataSource.saveEventsInTransaction([
+      SleepEventModel.fromDomain(startEvent),
+      SleepEventModel.fromDomain(endEvent),
+    ]);
+    
+    switch (saveResult) {
+      case Success():
+        // ignore: avoid_print
+        print('[SleepEventsProvider] Transaction committed successfully');
+      case Error(:final failure):
+        // ignore: avoid_print
+        print('[SleepEventsProvider] Transaction failed: ${failure.message}');
+        throw SleepEventException(failure.message);
+    }
+    
+    // STEP 3: Refresh to update UI and SleepState
+    await refresh();
+    
+    // ignore: avoid_print
+    print('[SleepEventsProvider] Session complete');
   }
 }
 

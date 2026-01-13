@@ -81,8 +81,11 @@ class CreateCorrectionEvent {
       ));
     }
 
-    // Get current user's caregiver for this baby
-    final caregiverResult = await caregiverRepository.getCurrentUserCaregiverForBaby(babyId);
+    // Get user's caregiver for this baby (never use "first caregiver")
+    final caregiverResult = await caregiverRepository.getCaregiverForBabyAndUser(
+      babyId: babyId,
+      userId: userId,
+    );
     if (caregiverResult.isError) {
       return DomainError(caregiverResult.failureOrNull!);
     }

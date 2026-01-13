@@ -30,6 +30,13 @@ abstract class SleepEventLocalDataSource {
   /// Saves multiple events to local storage
   Future<Result<void, Failure>> saveEvents(List<SleepEventModel> events);
 
+  /// Saves multiple events atomically in a single SQLite transaction
+  /// 
+  /// GUARDRAIL 2: All events are written in a single transaction.
+  /// If any fails, ALL are rolled back (no partial writes).
+  /// This ensures "sono completo" never leaves Start orphaned.
+  Future<Result<void, Failure>> saveEventsInTransaction(List<SleepEventModel> events);
+
   /// Updates event in local storage
   Future<Result<void, Failure>> updateEvent(SleepEventModel event);
 

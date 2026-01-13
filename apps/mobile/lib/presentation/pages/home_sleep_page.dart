@@ -6,6 +6,7 @@ import 'package:temp_flutter/application/providers/sleep_state_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/application/providers/sync_provider.dart';
 import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
+import 'package:temp_flutter/domain/entities/baby.dart';
 import 'package:temp_flutter/presentation/theme/night_theme.dart';
 import 'package:temp_flutter/presentation/widgets/sync_status_chip.dart';
 import 'package:temp_flutter/presentation/widgets/quick_time_chip.dart';
@@ -27,14 +28,47 @@ class HomeSleepPage extends ConsumerStatefulWidget {
 
 class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
   bool _isActionLoading = false;
+  ProviderSubscription<Baby?>? _babySubscription;
 
   @override
   void initState() {
     super.initState();
-    // Ensure caregiver context on init
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Ensure caregiver context on init
       _ensureCaregiverContext();
+      
+      // GUARDRAIL 1: Listen for baby changes to re-trigger context + refresh
+      _babySubscription = ref.listenManual<Baby?>(
+        activeBabyProvider,
+        (previous, next) {
+          if (previous?.id != next?.id) {
+            debugPrint('[HomeSleep] Baby changed: ${previous?.id} -> ${next?.id}');
+            _onBabyChanged();
+          }
+        },
+      );
     });
+  }
+
+  @override
+  void dispose() {
+    _babySubscription?.close();
+    super.dispose();
+  }
+
+  /// Called when active baby changes - re-trigger context and refresh events
+  Future<void> _onBabyChanged() async {
+    // Reset local loading state
+    if (mounted) {
+      setState(() => _isActionLoading = false);
+    }
+    
+    // Clear cache and re-ensure context for new baby
+    ref.read(caregiverContextProvider.notifier).clearCache();
+    await ref.read(caregiverContextProvider.notifier).ensureContext();
+    
+    // Refresh events for new baby
+    await ref.read(sleepEventsNotifierProvider.notifier).refresh();
   }
 
   Future<void> _ensureCaregiverContext() async {
@@ -57,15 +91,16 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     }
 
     // Determine button state
-    final (canCreateEvents, contextMessage) = switch (caregiverContext) {
-      CaregiverContextReady() => (true, null),
-      CaregiverContextLoading() => (false, null),
-      CaregiverContextInitial() => (false, null),
-      CaregiverContextOfflineNoCaregiver(:final message) => (false, message),
-      CaregiverContextError(:final message) => (false, message),
+    // GUARDRAIL 1: Initial também mostra UI (nunca silencioso)
+    final (canCreateEvents, contextMessage, isContextLoading) = switch (caregiverContext) {
+      CaregiverContextReady() => (true, null, false),
+      CaregiverContextLoading() => (false, null, true),
+      CaregiverContextInitial() => (false, null, true), // Treat Initial as loading (not silent)
+      CaregiverContextOfflineNoCaregiver(:final message) => (false, message, false),
+      CaregiverContextError(:final message) => (false, message, false),
     };
 
-    final isLoading = _isActionLoading || caregiverContext is CaregiverContextLoading;
+    final isLoading = _isActionLoading || isContextLoading;
 
     return SafeArea(
       child: Column(
@@ -81,7 +116,8 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   // Caregiver context status
-                  if (caregiverContext is CaregiverContextLoading)
+                  // GUARDRAIL 1: Show loading banner for both Loading and Initial states
+                  if (isContextLoading)
                     _buildLoadingBanner()
                   else if (contextMessage != null)
                     _buildErrorBanner(contextMessage),
@@ -321,15 +357,27 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
   }
 
   Future<void> _handleSleepAction() async {
+    // GUARDRAIL 3: Validate context BEFORE any action
+    if (!_validateContextBeforeAction()) return;
+    
+    final sleepState = ref.read(sleepStateNotifierProvider);
+    debugPrint('[HomeSleep] SleepAction: isSleeping=${sleepState.isSleeping}');
+    
     setState(() => _isActionLoading = true);
     try {
-      final sleepState = ref.read(sleepStateNotifierProvider);
       if (sleepState.isSleeping) {
+        debugPrint('[HomeSleep] Creating SleepEnd...');
         await ref.read(sleepEventsNotifierProvider.notifier).createSleepEnd();
       } else {
+        debugPrint('[HomeSleep] Creating SleepStart...');
         await ref.read(sleepEventsNotifierProvider.notifier).createSleepStart();
       }
-    } catch (e) {
+      debugPrint('[HomeSleep] SleepAction completed successfully');
+      // Refresh to ensure state is updated
+      await ref.read(sleepEventsNotifierProvider.notifier).refresh();
+    } catch (e, stack) {
+      debugPrint('[HomeSleep] SleepAction error: $e');
+      debugPrint('[HomeSleep] Stack: $stack');
       if (mounted) {
         _showErrorSnackBar(e.toString(), onRetry: _handleSleepAction);
       }
@@ -340,13 +388,52 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     }
   }
 
+  /// GUARDRAIL 3: Validates caregiver context before any action
+  /// Returns true if can proceed, false if blocked (shows snackbar)
+  bool _validateContextBeforeAction() {
+    final baby = ref.read(activeBabyProvider);
+    final context = ref.read(caregiverContextProvider);
+    
+    if (baby == null) {
+      _showErrorSnackBar('Nenhum bebé selecionado');
+      return false;
+    }
+    
+    if (context is CaregiverContextReady) {
+      return true;
+    }
+    
+    // Show appropriate message based on state
+    final message = switch (context) {
+      CaregiverContextLoading() || CaregiverContextInitial() => 
+        'A preparar permissões. Aguarda um momento.',
+      CaregiverContextOfflineNoCaregiver(:final message) => message,
+      CaregiverContextError(:final message) => message,
+      _ => 'Não tens permissão para criar eventos.',
+    };
+    
+    _showErrorSnackBar(message);
+    return false;
+  }
+
   Future<void> _handleQuickStart(int minutesAgo) async {
+    // GUARDRAIL 3: Validate context BEFORE any action
+    if (!_validateContextBeforeAction()) return;
+    
+    final timestamp = DateTime.now().subtract(Duration(minutes: minutesAgo));
+    debugPrint('[HomeSleep] QuickStart: $minutesAgo min ago = $timestamp');
+    
     setState(() => _isActionLoading = true);
     try {
       await ref.read(sleepEventsNotifierProvider.notifier).createSleepStartAt(
-        DateTime.now().subtract(Duration(minutes: minutesAgo)),
+        timestamp,
       );
-    } catch (e) {
+      debugPrint('[HomeSleep] QuickStart created successfully');
+      // Refresh to ensure state is updated
+      await ref.read(sleepEventsNotifierProvider.notifier).refresh();
+    } catch (e, stack) {
+      debugPrint('[HomeSleep] QuickStart error: $e');
+      debugPrint('[HomeSleep] Stack: $stack');
       if (mounted) {
         _showErrorSnackBar(e.toString(), onRetry: () => _handleQuickStart(minutesAgo));
       }
@@ -358,39 +445,248 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
   }
 
   Future<void> _handleCustomTime() async {
+    // GUARDRAIL 3: Validate context BEFORE any action
+    if (!_validateContextBeforeAction()) return;
+    
+    // Passo 1: Escolher hora
     final time = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.now(),
     );
     
-    if (time == null || !mounted) return;
+    if (time == null) {
+      debugPrint('[HomeSleep] Time picker cancelled');
+      return;
+    }
+    if (!mounted) return;
     
+    // Passo 2: Escolher dia (Hoje/Ontem)
+    final day = await _showDayPicker(time);
+    if (day == null) {
+      debugPrint('[HomeSleep] Day picker cancelled');
+      return;
+    }
+    if (!mounted) return;
+    
+    // Construir DateTime baseado na escolha
     final now = DateTime.now();
-    final selectedDateTime = DateTime(
-      now.year,
-      now.month,
-      now.day,
-      time.hour,
-      time.minute,
-    );
-    
-    DateTime? finalDateTime;
-    
-    // Se hora é no futuro, mostrar diálogo com opções
-    if (selectedDateTime.isAfter(now)) {
-      finalDateTime = await _showFutureTimeDialog(selectedDateTime);
-      if (finalDateTime == null || !mounted) return; // Cancelado
+    DateTime selectedDateTime;
+    if (day == 'today') {
+      selectedDateTime = DateTime(now.year, now.month, now.day, time.hour, time.minute);
     } else {
-      // Hora no passado ou presente - usar diretamente
-      finalDateTime = selectedDateTime;
+      // yesterday
+      final yesterday = now.subtract(const Duration(days: 1));
+      selectedDateTime = DateTime(yesterday.year, yesterday.month, yesterday.day, time.hour, time.minute);
     }
     
+    debugPrint('[HomeSleep] Selected DateTime: $selectedDateTime (day=$day)');
+    
+    // Verificar se ainda é futuro (edge case: escolheu "hoje" mas hora ainda não chegou)
+    if (selectedDateTime.isAfter(now)) {
+      debugPrint('[HomeSleep] DateTime is in future, showing dialog');
+      final adjusted = await _showFutureTimeDialog(selectedDateTime);
+      if (adjusted == null) {
+        debugPrint('[HomeSleep] Future dialog cancelled');
+        return;
+      }
+      if (!mounted) return;
+      selectedDateTime = adjusted;
+      debugPrint('[HomeSleep] Adjusted to: $selectedDateTime');
+    }
+    
+    // Passo 3: Perguntar intenção (A: ainda a dormir, B: sono completo)
+    final intent = await _showPastTimeIntentSheet(selectedDateTime);
+    if (intent == null) {
+      debugPrint('[HomeSleep] Intent sheet cancelled');
+      return;
+    }
+    if (!mounted) return;
+    
+    debugPrint('[HomeSleep] Intent selected: $intent');
+    
+    if (intent == 'still_sleeping') {
+      // Opção A: criar apenas SleepStart
+      await _createStartEvent(selectedDateTime);
+    } else if (intent == 'complete') {
+      // Opção B: wizard para sono completo
+      await _showCompleteSleepFlow(selectedDateTime);
+    }
+  }
+
+  /// Bottom sheet para escolher Hoje ou Ontem
+  Future<String?> _showDayPicker(TimeOfDay time) async {
+    final now = DateTime.now();
+    final currentHour = now.hour;
+    
+    // Default inteligente para contexto noturno:
+    // Se a hora escolhida é maior que a hora atual (ex: 23:00 quando são 08:00),
+    // provavelmente é de ontem à noite
+    final defaultIsYesterday = time.hour > currentHour + 2;
+    
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: NightTheme.surface,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Que dia?',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: NightTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Hora escolhida: ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+              style: TextStyle(
+                fontSize: 14,
+                color: NightTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Hoje
+            FilledButton(
+              onPressed: () => Navigator.pop(context, 'today'),
+              style: FilledButton.styleFrom(
+                backgroundColor: defaultIsYesterday 
+                    ? NightTheme.surface 
+                    : NightTheme.primary,
+                foregroundColor: defaultIsYesterday 
+                    ? NightTheme.textPrimary 
+                    : Colors.white,
+                side: defaultIsYesterday 
+                    ? BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.3))
+                    : null,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              child: const Text('Hoje'),
+            ),
+            const SizedBox(height: 12),
+            
+            // Ontem
+            FilledButton(
+              onPressed: () => Navigator.pop(context, 'yesterday'),
+              style: FilledButton.styleFrom(
+                backgroundColor: defaultIsYesterday 
+                    ? NightTheme.primary 
+                    : NightTheme.surface,
+                foregroundColor: defaultIsYesterday 
+                    ? Colors.white 
+                    : NightTheme.textPrimary,
+                side: defaultIsYesterday 
+                    ? null
+                    : BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.3)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              child: const Text('Ontem'),
+            ),
+            const SizedBox(height: 12),
+            
+            // Cancelar
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: Text(
+                'Cancelar',
+                style: TextStyle(color: NightTheme.textSecondary),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Bottom sheet para perguntar intenção: ainda a dormir vs sono completo
+  Future<String?> _showPastTimeIntentSheet(DateTime pastTime) async {
+    final timeStr = '${pastTime.hour.toString().padLeft(2, '0')}:${pastTime.minute.toString().padLeft(2, '0')}';
+    final isYesterday = pastTime.day != DateTime.now().day;
+    final dayLabel = isYesterday ? 'ontem' : 'hoje';
+    
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: NightTheme.surface,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'O que queres registar?',
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: NightTheme.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Início: $dayLabel às $timeStr',
+              style: TextStyle(
+                fontSize: 14,
+                color: NightTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Opção A: Ainda a dormir
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, 'still_sleeping'),
+              icon: const Icon(Icons.bedtime),
+              label: const Text('Ainda está a dormir'),
+              style: FilledButton.styleFrom(
+                backgroundColor: NightTheme.primary,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Opção B: Sono completo
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, 'complete'),
+              icon: const Icon(Icons.check_circle),
+              label: const Text('Registar sono completo'),
+              style: FilledButton.styleFrom(
+                backgroundColor: NightTheme.secondary,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Cancelar
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: Text(
+                'Cancelar',
+                style: TextStyle(color: NightTheme.textSecondary),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Helper para criar SleepStart com feedback
+  Future<void> _createStartEvent(DateTime startTime) async {
+    debugPrint('[HomeSleep] Creating SleepStart at: $startTime (UTC: ${startTime.toUtc()})');
     setState(() => _isActionLoading = true);
     try {
       await ref.read(sleepEventsNotifierProvider.notifier).createSleepStartAt(
-        finalDateTime,
+        startTime,
       );
-    } catch (e) {
+      debugPrint('[HomeSleep] SleepStart created successfully');
+      // Refresh to ensure state is updated
+      await ref.read(sleepEventsNotifierProvider.notifier).refresh();
+    } catch (e, stack) {
+      debugPrint('[HomeSleep] Error creating SleepStart: $e');
+      debugPrint('[HomeSleep] Stack: $stack');
       if (mounted) {
         _showErrorSnackBar(e.toString());
       }
@@ -399,6 +695,181 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
         setState(() => _isActionLoading = false);
       }
     }
+  }
+
+  /// Wizard para registar sono completo (2 passos: início + fim)
+  Future<void> _showCompleteSleepFlow(DateTime initialStart) async {
+    debugPrint('[HomeSleep] Complete sleep flow started with: $initialStart');
+    DateTime startTime = initialStart;
+    
+    // Passo 1: Confirmar/ajustar hora de início
+    final startTimeOfDay = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(startTime),
+      helpText: 'Hora de início do sono',
+    );
+    
+    if (startTimeOfDay == null) {
+      debugPrint('[HomeSleep] Start time picker cancelled');
+      return;
+    }
+    if (!mounted) return;
+    
+    // Reconstruir startTime com a hora ajustada (mantendo o dia)
+    startTime = DateTime(
+      startTime.year,
+      startTime.month,
+      startTime.day,
+      startTimeOfDay.hour,
+      startTimeOfDay.minute,
+    );
+    debugPrint('[HomeSleep] Start time adjusted to: $startTime');
+    
+    // Passo 2: Escolher hora de fim
+    final endTimeOfDay = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(
+        startTime.add(const Duration(hours: 2)),
+      ),
+      helpText: 'Hora de fim do sono',
+    );
+    
+    if (endTimeOfDay == null) {
+      debugPrint('[HomeSleep] End time picker cancelled');
+      return;
+    }
+    if (!mounted) return;
+    
+    // Construir endTime no mesmo dia que startTime
+    DateTime endTime = DateTime(
+      startTime.year,
+      startTime.month,
+      startTime.day,
+      endTimeOfDay.hour,
+      endTimeOfDay.minute,
+    );
+    debugPrint('[HomeSleep] End time initial: $endTime');
+    
+    // Se end <= start, assumir que atravessou meia-noite (fim no dia seguinte)
+    if (!endTime.isAfter(startTime)) {
+      debugPrint('[HomeSleep] End <= Start, showing midnight dialog');
+      final crossMidnight = await _showCrossMidnightDialog(startTime, endTime);
+      if (crossMidnight == null) {
+        debugPrint('[HomeSleep] Midnight dialog cancelled');
+        return;
+      }
+      if (!mounted) return;
+      
+      if (crossMidnight) {
+        endTime = endTime.add(const Duration(days: 1));
+        debugPrint('[HomeSleep] End time adjusted for midnight: $endTime');
+      } else {
+        debugPrint('[HomeSleep] User chose to correct, returning');
+        return;
+      }
+    }
+    
+    // Verificar se fim está no futuro
+    final now = DateTime.now();
+    if (endTime.isAfter(now)) {
+      debugPrint('[HomeSleep] End is in future, showing dialog');
+      final adjusted = await _showFutureEndDialog(endTime);
+      if (adjusted == null) {
+        debugPrint('[HomeSleep] Future end dialog cancelled');
+        return;
+      }
+      if (!mounted) return;
+      endTime = adjusted;
+      debugPrint('[HomeSleep] End time adjusted to: $endTime');
+    }
+    
+    // Criar sessão completa
+    debugPrint('[HomeSleep] Creating session: start=$startTime, end=$endTime');
+    debugPrint('[HomeSleep] UTC: start=${startTime.toUtc()}, end=${endTime.toUtc()}');
+    setState(() => _isActionLoading = true);
+    try {
+      await ref.read(sleepEventsNotifierProvider.notifier).createSleepSession(
+        startTime: startTime,
+        endTime: endTime,
+      );
+      debugPrint('[HomeSleep] Session created successfully');
+      // Refresh events to ensure state is updated
+      await ref.read(sleepEventsNotifierProvider.notifier).refresh();
+      debugPrint('[HomeSleep] Events refreshed');
+    } catch (e, stack) {
+      debugPrint('[HomeSleep] Error creating session: $e');
+      debugPrint('[HomeSleep] Stack: $stack');
+      if (mounted) {
+        _showErrorSnackBar(e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isActionLoading = false);
+      }
+    }
+  }
+
+  /// Diálogo para confirmar que o sono atravessou meia-noite
+  Future<bool?> _showCrossMidnightDialog(DateTime start, DateTime end) async {
+    final startStr = '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
+    final endStr = '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
+    
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: NightTheme.surface,
+        title: const Text(
+          'Atravessou meia-noite?',
+          style: TextStyle(color: NightTheme.textPrimary),
+        ),
+        content: Text(
+          'Início às $startStr e fim às $endStr.\n\nO sono atravessou a meia-noite (dormiu ontem à noite, acordou hoje de manhã)?',
+          style: const TextStyle(color: NightTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: Text('Cancelar', style: TextStyle(color: NightTheme.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Não, corrigir'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Sim'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Diálogo para quando hora de fim está no futuro
+  Future<DateTime?> _showFutureEndDialog(DateTime futureEnd) async {
+    return showDialog<DateTime>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: NightTheme.surface,
+        title: const Text(
+          'Hora de fim no futuro',
+          style: TextStyle(color: NightTheme.textPrimary),
+        ),
+        content: const Text(
+          'A hora de fim não pode estar no futuro.',
+          style: TextStyle(color: NightTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, null),
+            child: Text('Cancelar', style: TextStyle(color: NightTheme.textSecondary)),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, DateTime.now()),
+            child: const Text('Usar agora'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSyncDetails() {

@@ -180,8 +180,18 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
     return months[month - 1];
   }
 
-  bool _isSameDay(DateTime a, DateTime b) {
-    return a.year == b.year && a.month == b.month && a.day == b.day;
+  /// Compara se dois DateTimes são do mesmo dia LOCAL
+  /// 
+  /// IMPORTANTE: Converte para local antes de comparar, porque os eventos
+  /// estão guardados em UTC mas queremos filtrar pelo dia local do utilizador.
+  bool _isSameDay(DateTime eventTimestamp, DateTime selectedDate) {
+    // Converter timestamp do evento (UTC) para local
+    final eventLocal = eventTimestamp.toLocal();
+    final selectedLocal = selectedDate.toLocal();
+    
+    return eventLocal.year == selectedLocal.year && 
+           eventLocal.month == selectedLocal.month && 
+           eventLocal.day == selectedLocal.day;
   }
 
   Future<void> _showDatePicker() async {
