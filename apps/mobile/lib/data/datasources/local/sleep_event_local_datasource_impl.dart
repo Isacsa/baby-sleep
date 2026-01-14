@@ -167,6 +167,46 @@ class SleepEventLocalDataSourceImpl implements SleepEventLocalDataSource {
   }
 
   @override
+  Future<Result<void, Failure>> saveAndUpdateEventsInTransaction({
+    required List<SleepEventModel> inserts,
+    required List<SleepEventModel> updates,
+  }) async {
+    try {
+      final db = await _localDatabase.database;
+      
+      // Use real SQLite transaction - all inserts and updates or nothing
+      await db.transaction((txn) async {
+        final batch = txn.batch();
+        
+        // Insert new events (correction events + new sleep events)
+        for (final event in inserts) {
+          batch.insert(
+            'sleep_events',
+            _modelToMap(event),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+        
+        // Update existing events (mark as corrected)
+        for (final event in updates) {
+          batch.update(
+            'sleep_events',
+            _modelToMap(event),
+            where: 'id = ?',
+            whereArgs: [event.id],
+          );
+        }
+        
+        await batch.commit(noResult: true);
+      });
+      
+      return const Success(null);
+    } catch (e) {
+      return Error(StorageFailure('Failed to save and update events in transaction: $e', originalError: e));
+    }
+  }
+
+  @override
   Future<Result<void, Failure>> updateEvent(SleepEventModel event) async {
     try {
       final db = await _localDatabase.database;

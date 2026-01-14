@@ -11,6 +11,7 @@ import 'package:temp_flutter/data/datasources/remote/caregiver_remote_datasource
 import 'package:temp_flutter/data/models/sleep_event_model.dart';
 import 'package:temp_flutter/domain/use_cases/sleep/create_sleep_start.dart';
 import 'package:temp_flutter/domain/use_cases/sleep/create_sleep_end.dart';
+import 'package:temp_flutter/domain/value_objects/sleep_session.dart';
 import 'package:temp_flutter/core/utils/uuid_generator.dart';
 import 'package:temp_flutter/core/utils/device_id_manager.dart';
 import 'active_baby_provider.dart';
@@ -177,55 +178,49 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     state = AsyncData([event, ...currentEvents]);
   }
 
-  /// Checks if a timestamp falls within an existing sleep session
+  /// Finds all sessions that overlap with the given interval [startUtc, endUtc]
   /// 
-  /// Returns the session (start, end) if overlap found, null otherwise.
-  /// Sessions are derived from SleepStart/SleepEnd pairs in chronological order.
-  ({DateTime start, DateTime? end})? _findOverlappingSession(DateTime timestamp, List<SleepEvent> events) {
-    if (events.isEmpty) return null;
+  /// Uses SleepSession.fromEventList to derive sessions from events.
+  /// Overlap is checked using inclusive interval intersection:
+  /// aStart <= bEnd && bStart <= aEnd
+  /// 
+  /// Returns list of overlapping sessions (empty if none).
+  List<SleepSession> _findOverlappingSessions({
+    required DateTime startUtc,
+    required DateTime endUtc,
+    required List<SleepEvent> events,
+  }) {
+    if (events.isEmpty) return [];
     
-    // Sort events by timestamp ASC for easier session pairing
-    final sortedEvents = events.where((e) => e.isValid).toList()
-      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    // Derive sessions using existing domain logic
+    final sessions = SleepSession.fromEventList(events);
     
-    // Build sessions from Start/End pairs
-    DateTime? sessionStart;
+    final overlapping = <SleepSession>[];
     
-    for (final event in sortedEvents) {
-      if (event.type == SleepEventType.sleepStart) {
-        // Check if timestamp falls within a previous open session
-        if (sessionStart != null && timestamp.isAfter(sessionStart) && timestamp.isBefore(event.timestamp)) {
-          // This would be between an unclosed start and the next start - unusual but check
-        }
-        sessionStart = event.timestamp;
-      } else if (event.type == SleepEventType.sleepEnd && sessionStart != null) {
-        // Check if timestamp falls within this session
-        if (timestamp.isAfter(sessionStart) && timestamp.isBefore(event.timestamp)) {
-          return (start: sessionStart, end: event.timestamp);
-        }
-        // Also check if timestamp equals start or end (edge case)
-        if (timestamp.isAtSameMomentAs(sessionStart) || timestamp.isAtSameMomentAs(event.timestamp)) {
-          return (start: sessionStart, end: event.timestamp);
-        }
-        sessionStart = null; // Session closed
+    for (final session in sessions) {
+      final sessionStart = session.startEvent.timestamp;
+      // For open sessions (no end), use "now" as implicit end
+      final sessionEnd = session.endEvent?.timestamp ?? DateTime.now().toUtc();
+      
+      // Interval intersection: aStart <= bEnd && bStart <= aEnd
+      final hasOverlap = (startUtc.isBefore(sessionEnd) || startUtc.isAtSameMomentAs(sessionEnd)) &&
+                         (sessionStart.isBefore(endUtc) || sessionStart.isAtSameMomentAs(endUtc));
+      
+      if (hasOverlap) {
+        overlapping.add(session);
       }
     }
     
-    // Check if timestamp falls within an open session (no end yet)
-    if (sessionStart != null && timestamp.isAfter(sessionStart)) {
-      return (start: sessionStart, end: null);
-    }
-    
-    return null;
+    return overlapping;
   }
 
-  /// Formats a session for display in error messages
-  String _formatSession(({DateTime start, DateTime? end}) session) {
-    final startLocal = session.start.toLocal();
+  /// Formats a SleepSession for display in error messages
+  String _formatSleepSession(SleepSession session) {
+    final startLocal = session.startEvent.timestamp.toLocal();
     final startStr = '${startLocal.hour.toString().padLeft(2, '0')}:${startLocal.minute.toString().padLeft(2, '0')}';
     
-    if (session.end != null) {
-      final endLocal = session.end!.toLocal();
+    if (session.endEvent != null) {
+      final endLocal = session.endEvent!.timestamp.toLocal();
       final endStr = '${endLocal.hour.toString().padLeft(2, '0')}:${endLocal.minute.toString().padLeft(2, '0')}';
       return '$startStr - $endStr';
     } else {
@@ -270,26 +265,53 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
       throw const SleepEventException('Nenhum bebé selecionado');
     }
     
-    // Check for overlap with existing sessions
-    final timestampUtc = timestamp.toUtc();
-    final overlappingSession = _findOverlappingSession(timestampUtc, currentEvents);
-    if (overlappingSession != null) {
-      final sessionStr = _formatSession(overlappingSession);
+    // Load events from SQLite if state is empty (e.g., after app restart)
+    List<SleepEvent> eventsToCheck = currentEvents;
+    if (eventsToCheck.isEmpty) {
       // ignore: avoid_print
-      print('[SleepEventsProvider] Overlap detected: $sessionStr');
-      throw SleepEventException('Já existe sono registado nesse período ($sessionStr)');
+      print('[SleepEventsProvider] state.value is empty, loading from SQLite...');
+      try {
+        eventsToCheck = await _loadEvents(activeBaby.id);
+        // ignore: avoid_print
+        print('[SleepEventsProvider] Loaded ${eventsToCheck.length} events from SQLite');
+      } catch (e) {
+        // ignore: avoid_print
+        print('[SleepEventsProvider] Failed to load events: $e');
+        // Continue with empty list - overlap check will pass
+      }
     }
     
-    final now = DateTime.now().toUtc();
+    // Check for overlap with existing sessions using INTERVAL [start, now]
+    // Quick chips create a SleepStart that implies sleep continues until now
+    final startUtc = timestamp.toUtc();
+    final nowUtc = DateTime.now().toUtc();
+    
+    final overlappingSessions = _findOverlappingSessions(
+      startUtc: startUtc,
+      endUtc: nowUtc,
+      events: eventsToCheck,
+    );
+    
+    if (overlappingSessions.isNotEmpty) {
+      final sessionStr = overlappingSessions.map(_formatSleepSession).join(', ');
+      // ignore: avoid_print
+      print('[SleepEventsProvider] Overlap detected with interval [$startUtc, $nowUtc]: $sessionStr');
+      throw OverlapException(
+        message: 'Já existe sono registado nesse período ($sessionStr)',
+        overlappingSessions: overlappingSessions,
+      );
+    }
+    
+    final now = nowUtc;
     final eventId = UuidGenerator.generate();
     final deviceId = await DeviceIdManager.getDeviceId();
     
     // ignore: avoid_print
-    print('[SleepEventsProvider] Executing use case with timestamp=$timestampUtc');
+    print('[SleepEventsProvider] Executing use case with timestamp=$startUtc');
     
     final result = await _createSleepStartUseCase.execute(
       babyId: activeBaby.id,
-      timestamp: timestamp.toUtc(),
+      timestamp: startUtc,
       userId: user.id,
       eventId: eventId,
       deviceId: deviceId,
@@ -443,6 +465,37 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
       throw const SleepEventException('Nenhum bebé selecionado');
     }
 
+    // Check for overlap with existing sessions using INTERVAL [start, end]
+    List<SleepEvent> eventsToCheck = state.value ?? [];
+    if (eventsToCheck.isEmpty) {
+      // ignore: avoid_print
+      print('[SleepEventsProvider] createSleepSession: state.value is empty, loading from SQLite...');
+      try {
+        eventsToCheck = await _loadEvents(activeBaby.id);
+        // ignore: avoid_print
+        print('[SleepEventsProvider] Loaded ${eventsToCheck.length} events from SQLite');
+      } catch (e) {
+        // ignore: avoid_print
+        print('[SleepEventsProvider] Failed to load events: $e');
+      }
+    }
+    
+    final overlappingSessions = _findOverlappingSessions(
+      startUtc: startUtc,
+      endUtc: endUtc,
+      events: eventsToCheck,
+    );
+    
+    if (overlappingSessions.isNotEmpty) {
+      final sessionStr = overlappingSessions.map(_formatSleepSession).join(', ');
+      // ignore: avoid_print
+      print('[SleepEventsProvider] Session overlap detected [$startUtc, $endUtc]: $sessionStr');
+      throw OverlapException(
+        message: 'Já existe sono registado nesse período ($sessionStr)',
+        overlappingSessions: overlappingSessions,
+      );
+    }
+
     final now = DateTime.now().toUtc();
     final deviceId = await DeviceIdManager.getDeviceId();
     
@@ -517,6 +570,272 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     // ignore: avoid_print
     print('[SleepEventsProvider] Session complete');
   }
+
+  /// Overwrites overlapping sessions and creates a new SleepStart
+  /// 
+  /// 1. Creates correction events for each original event in overlapping sessions
+  /// 2. Marks original events as corrected (isCorrected=true, correctedBy=correctionEventId)
+  /// 3. Creates the new SleepStart event
+  /// 4. All operations happen atomically in a single SQLite transaction
+  Future<void> overwriteAndCreateStart({
+    required List<SleepSession> overlappingSessions,
+    required DateTime newStartTime,
+  }) async {
+    // ignore: avoid_print
+    print('[SleepEventsProvider] overwriteAndCreateStart: ${overlappingSessions.length} sessions to overwrite');
+    
+    final user = ref.read(authProvider);
+    final activeBaby = ref.read(activeBabyProvider);
+    
+    if (user == null) {
+      throw const SleepEventException('Utilizador não autenticado');
+    }
+    
+    if (activeBaby == null) {
+      throw const SleepEventException('Nenhum bebé selecionado');
+    }
+
+    final now = DateTime.now().toUtc();
+    final deviceId = await DeviceIdManager.getDeviceId();
+    
+    // Collect all events to insert and update
+    final inserts = <SleepEventModel>[];
+    final updates = <SleepEventModel>[];
+    
+    // Process each overlapping session
+    for (final session in overlappingSessions) {
+      // Mark start event as corrected
+      final startCorrectionId = UuidGenerator.generate();
+      updates.add(SleepEventModel.fromDomain(
+        session.startEvent.copyWith(
+          isCorrected: true,
+          correctedBy: startCorrectionId,
+        ),
+      ));
+      
+      // Create correction event for start (as domain then convert)
+      final startCorrectionEvent = SleepEvent(
+        id: startCorrectionId,
+        babyId: activeBaby.id,
+        type: SleepEventType.sleepStart,
+        timestamp: session.startEvent.timestamp,
+        caregiverId: session.startEvent.caregiverId,
+        deviceId: deviceId,
+        createdAt: now,
+        isCorrected: true,
+        syncedAt: null,
+        correctedBy: session.startEvent.id,
+        metadata: {'correction_reason': 'replaced_by_user'},
+      );
+      inserts.add(SleepEventModel.fromDomain(startCorrectionEvent));
+      
+      // If session has end event, mark it and create correction too
+      if (session.endEvent != null) {
+        final endCorrectionId = UuidGenerator.generate();
+        updates.add(SleepEventModel.fromDomain(
+          session.endEvent!.copyWith(
+            isCorrected: true,
+            correctedBy: endCorrectionId,
+          ),
+        ));
+        
+        final endCorrectionEvent = SleepEvent(
+          id: endCorrectionId,
+          babyId: activeBaby.id,
+          type: SleepEventType.sleepEnd,
+          timestamp: session.endEvent!.timestamp,
+          caregiverId: session.endEvent!.caregiverId,
+          deviceId: deviceId,
+          createdAt: now,
+          isCorrected: true,
+          syncedAt: null,
+          correctedBy: session.endEvent!.id,
+          metadata: {'correction_reason': 'replaced_by_user'},
+        );
+        inserts.add(SleepEventModel.fromDomain(endCorrectionEvent));
+      }
+    }
+    
+    // Create the new SleepStart event
+    final newStartId = UuidGenerator.generate();
+    final newStartResult = await _createSleepStartUseCase.execute(
+      babyId: activeBaby.id,
+      timestamp: newStartTime.toUtc(),
+      userId: user.id,
+      eventId: newStartId,
+      deviceId: deviceId,
+      createdAt: now,
+      persist: false, // Validate only
+    );
+    
+    if (newStartResult.isError) {
+      throw SleepEventException(newStartResult.failureOrNull!.message);
+    }
+    
+    inserts.add(SleepEventModel.fromDomain(newStartResult.dataOrNull!));
+    
+    // Execute everything atomically
+    // ignore: avoid_print
+    print('[SleepEventsProvider] Committing: ${inserts.length} inserts, ${updates.length} updates');
+    
+    final saveResult = await _localDataSource.saveAndUpdateEventsInTransaction(
+      inserts: inserts,
+      updates: updates,
+    );
+    
+    switch (saveResult) {
+      case Success():
+        // ignore: avoid_print
+        print('[SleepEventsProvider] Overwrite transaction committed');
+      case Error(:final failure):
+        throw SleepEventException(failure.message);
+    }
+    
+    // Refresh state
+    await refresh();
+  }
+
+  /// Overwrites overlapping sessions and creates a complete sleep session (Start + End)
+  /// 
+  /// Same as overwriteAndCreateStart but creates both Start and End events.
+  Future<void> overwriteAndCreateSession({
+    required List<SleepSession> overlappingSessions,
+    required DateTime newStartTime,
+    required DateTime newEndTime,
+  }) async {
+    // ignore: avoid_print
+    print('[SleepEventsProvider] overwriteAndCreateSession: ${overlappingSessions.length} sessions to overwrite');
+    
+    final user = ref.read(authProvider);
+    final activeBaby = ref.read(activeBabyProvider);
+    
+    if (user == null) {
+      throw const SleepEventException('Utilizador não autenticado');
+    }
+    
+    if (activeBaby == null) {
+      throw const SleepEventException('Nenhum bebé selecionado');
+    }
+
+    // Validate order
+    final startUtc = newStartTime.toUtc();
+    final endUtc = newEndTime.toUtc();
+    
+    if (!endUtc.isAfter(startUtc)) {
+      throw const SleepEventException('A hora de fim deve ser depois da hora de início');
+    }
+
+    final now = DateTime.now().toUtc();
+    final deviceId = await DeviceIdManager.getDeviceId();
+    
+    final inserts = <SleepEventModel>[];
+    final updates = <SleepEventModel>[];
+    
+    // Process each overlapping session (same as overwriteAndCreateStart)
+    for (final session in overlappingSessions) {
+      final startCorrectionId = UuidGenerator.generate();
+      updates.add(SleepEventModel.fromDomain(
+        session.startEvent.copyWith(
+          isCorrected: true,
+          correctedBy: startCorrectionId,
+        ),
+      ));
+      
+      final startCorrectionEvent = SleepEvent(
+        id: startCorrectionId,
+        babyId: activeBaby.id,
+        type: SleepEventType.sleepStart,
+        timestamp: session.startEvent.timestamp,
+        caregiverId: session.startEvent.caregiverId,
+        deviceId: deviceId,
+        createdAt: now,
+        isCorrected: true,
+        syncedAt: null,
+        correctedBy: session.startEvent.id,
+        metadata: {'correction_reason': 'replaced_by_user'},
+      );
+      inserts.add(SleepEventModel.fromDomain(startCorrectionEvent));
+      
+      if (session.endEvent != null) {
+        final endCorrectionId = UuidGenerator.generate();
+        updates.add(SleepEventModel.fromDomain(
+          session.endEvent!.copyWith(
+            isCorrected: true,
+            correctedBy: endCorrectionId,
+          ),
+        ));
+        
+        final endCorrectionEvent = SleepEvent(
+          id: endCorrectionId,
+          babyId: activeBaby.id,
+          type: SleepEventType.sleepEnd,
+          timestamp: session.endEvent!.timestamp,
+          caregiverId: session.endEvent!.caregiverId,
+          deviceId: deviceId,
+          createdAt: now,
+          isCorrected: true,
+          syncedAt: null,
+          correctedBy: session.endEvent!.id,
+          metadata: {'correction_reason': 'replaced_by_user'},
+        );
+        inserts.add(SleepEventModel.fromDomain(endCorrectionEvent));
+      }
+    }
+    
+    // Create the new Start and End events
+    final newStartId = UuidGenerator.generate();
+    final newEndId = UuidGenerator.generate();
+    
+    final startResult = await _createSleepStartUseCase.execute(
+      babyId: activeBaby.id,
+      timestamp: startUtc,
+      userId: user.id,
+      eventId: newStartId,
+      deviceId: deviceId,
+      createdAt: now,
+      persist: false,
+    );
+    
+    if (startResult.isError) {
+      throw SleepEventException(startResult.failureOrNull!.message);
+    }
+    
+    final endResult = await _createSleepEndUseCase.execute(
+      babyId: activeBaby.id,
+      timestamp: endUtc,
+      userId: user.id,
+      eventId: newEndId,
+      deviceId: deviceId,
+      createdAt: now,
+      persist: false,
+    );
+    
+    if (endResult.isError) {
+      throw SleepEventException(endResult.failureOrNull!.message);
+    }
+    
+    inserts.add(SleepEventModel.fromDomain(startResult.dataOrNull!));
+    inserts.add(SleepEventModel.fromDomain(endResult.dataOrNull!));
+    
+    // Execute everything atomically
+    // ignore: avoid_print
+    print('[SleepEventsProvider] Committing session: ${inserts.length} inserts, ${updates.length} updates');
+    
+    final saveResult = await _localDataSource.saveAndUpdateEventsInTransaction(
+      inserts: inserts,
+      updates: updates,
+    );
+    
+    switch (saveResult) {
+      case Success():
+        // ignore: avoid_print
+        print('[SleepEventsProvider] Overwrite session transaction committed');
+      case Error(:final failure):
+        throw SleepEventException(failure.message);
+    }
+    
+    await refresh();
+  }
 }
 
 /// Exception thrown when sleep event creation fails
@@ -526,4 +845,15 @@ class SleepEventException implements Exception {
   
   @override
   String toString() => message;
+}
+
+/// Exception thrown when an overlap is detected with existing sleep sessions.
+/// Contains the list of overlapping sessions for UI to offer "Substituir" option.
+class OverlapException extends SleepEventException {
+  final List<SleepSession> overlappingSessions;
+  
+  const OverlapException({
+    required String message,
+    required this.overlappingSessions,
+  }) : super(message);
 }

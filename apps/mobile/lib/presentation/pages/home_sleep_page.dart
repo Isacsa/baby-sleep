@@ -7,6 +7,7 @@ import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/application/providers/sync_provider.dart';
 import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
 import 'package:temp_flutter/domain/entities/baby.dart';
+import 'package:temp_flutter/domain/value_objects/sleep_session.dart';
 import 'package:temp_flutter/presentation/theme/night_theme.dart';
 import 'package:temp_flutter/presentation/widgets/sync_status_chip.dart';
 import 'package:temp_flutter/presentation/widgets/quick_time_chip.dart';
@@ -453,6 +454,18 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       );
       debugPrint('[HomeSleep] QuickStart created successfully');
       // Note: addEvent() already updates state - no refresh() needed
+    } on OverlapException catch (e) {
+      debugPrint('[HomeSleep] QuickStart overlap detected: ${e.overlappingSessions.length} sessions');
+      if (mounted) {
+        // Show modal with Substituir option
+        final shouldReplace = await _showOverlapModal(e.overlappingSessions, e.message);
+        if (shouldReplace == true && mounted) {
+          await _overwriteSessionsAndCreateStart(
+            overlappingSessions: e.overlappingSessions,
+            newStartTime: timestamp,
+          );
+        }
+      }
     } catch (e, stack) {
       debugPrint('[HomeSleep] QuickStart error: $e');
       debugPrint('[HomeSleep] Stack: $stack');
@@ -637,6 +650,177 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     );
   }
 
+  /// Shows modal when overlap is detected with existing sessions
+  /// Returns true if user chooses to replace, false/null otherwise
+  Future<bool?> _showOverlapModal(List<SleepSession> overlappingSessions, String message) async {
+    final sessionsStr = overlappingSessions.map((s) {
+      final start = s.startEvent.timestamp.toLocal();
+      final startStr = '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
+      if (s.endEvent != null) {
+        final end = s.endEvent!.timestamp.toLocal();
+        final endStr = '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
+        return '$startStr - $endStr';
+      }
+      return 'desde $startStr (em curso)';
+    }).join('\n');
+
+    return showModalBottomSheet<bool>(
+      context: context,
+      backgroundColor: NightTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: NightTheme.textSecondary.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            // Warning icon and title
+            Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange.shade400, size: 28),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Já existe sono registado',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: NightTheme.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            // Sessions info
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: NightTheme.backgroundBase.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                sessionsStr,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: NightTheme.textSecondary,
+                  fontFamily: 'monospace',
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'O novo registo sobrepõe-se a este(s) sono(s). Queres substituir?',
+              style: TextStyle(
+                fontSize: 14,
+                color: NightTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Replace button
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, true),
+              icon: const Icon(Icons.swap_horiz),
+              label: const Text('Substituir sono existente'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.orange.shade600,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Cancel button
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(
+                'Cancelar',
+                style: TextStyle(color: NightTheme.textSecondary),
+              ),
+            ),
+            
+            SizedBox(height: MediaQuery.of(context).padding.bottom),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Overwrites overlapping sessions and creates a new SleepStart
+  Future<void> _overwriteSessionsAndCreateStart({
+    required List<SleepSession> overlappingSessions,
+    required DateTime newStartTime,
+  }) async {
+    setState(() => _isActionLoading = true);
+    try {
+      await ref.read(sleepEventsNotifierProvider.notifier).overwriteAndCreateStart(
+        overlappingSessions: overlappingSessions,
+        newStartTime: newStartTime,
+      );
+      debugPrint('[HomeSleep] Overwrite and create start successful');
+      if (mounted) {
+        _showSuccessSnackBar('Sono substituído');
+      }
+    } catch (e, stack) {
+      debugPrint('[HomeSleep] Overwrite error: $e');
+      debugPrint('[HomeSleep] Stack: $stack');
+      if (mounted) {
+        _showErrorSnackBar(e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isActionLoading = false);
+      }
+    }
+  }
+
+  /// Overwrites overlapping sessions and creates a complete sleep session
+  Future<void> _overwriteSessionsAndCreateSession({
+    required List<SleepSession> overlappingSessions,
+    required DateTime newStartTime,
+    required DateTime newEndTime,
+  }) async {
+    setState(() => _isActionLoading = true);
+    try {
+      await ref.read(sleepEventsNotifierProvider.notifier).overwriteAndCreateSession(
+        overlappingSessions: overlappingSessions,
+        newStartTime: newStartTime,
+        newEndTime: newEndTime,
+      );
+      debugPrint('[HomeSleep] Overwrite and create session successful');
+      if (mounted) {
+        _showSuccessSnackBar('Sono substituído');
+      }
+    } catch (e, stack) {
+      debugPrint('[HomeSleep] Overwrite session error: $e');
+      debugPrint('[HomeSleep] Stack: $stack');
+      if (mounted) {
+        _showErrorSnackBar(e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isActionLoading = false);
+      }
+    }
+  }
+
   Future<void> _handleCustomTime() async {
     // GUARDRAIL 3: Validate context BEFORE any action
     if (!_validateContextBeforeAction()) return;
@@ -653,39 +837,15 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     }
     if (!mounted) return;
     
-    // Passo 2: Escolher dia (Hoje/Ontem)
-    final day = await _showDayPicker(time);
-    if (day == null) {
+    // Passo 2: Escolher dia (Hoje/Ontem/Outro dia) com regras anti-futuro
+    final selectedDateTime = await _showSmartDayPicker(time);
+    if (selectedDateTime == null) {
       debugPrint('[HomeSleep] Day picker cancelled');
       return;
     }
     if (!mounted) return;
     
-    // Construir DateTime baseado na escolha
-    final now = DateTime.now();
-    DateTime selectedDateTime;
-    if (day == 'today') {
-      selectedDateTime = DateTime(now.year, now.month, now.day, time.hour, time.minute);
-    } else {
-      // yesterday
-      final yesterday = now.subtract(const Duration(days: 1));
-      selectedDateTime = DateTime(yesterday.year, yesterday.month, yesterday.day, time.hour, time.minute);
-    }
-    
-    debugPrint('[HomeSleep] Selected DateTime: $selectedDateTime (day=$day)');
-    
-    // Verificar se ainda é futuro (edge case: escolheu "hoje" mas hora ainda não chegou)
-    if (selectedDateTime.isAfter(now)) {
-      debugPrint('[HomeSleep] DateTime is in future, showing dialog');
-      final adjusted = await _showFutureTimeDialog(selectedDateTime);
-      if (adjusted == null) {
-        debugPrint('[HomeSleep] Future dialog cancelled');
-        return;
-      }
-      if (!mounted) return;
-      selectedDateTime = adjusted;
-      debugPrint('[HomeSleep] Adjusted to: $selectedDateTime');
-    }
+    debugPrint('[HomeSleep] Selected DateTime: $selectedDateTime');
     
     // Passo 3: Perguntar intenção (A: ainda a dormir, B: sono completo)
     final intent = await _showPastTimeIntentSheet(selectedDateTime);
@@ -706,28 +866,54 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     }
   }
 
-  /// Bottom sheet para escolher Hoje ou Ontem
-  Future<String?> _showDayPicker(TimeOfDay time) async {
+  /// Smart day picker that returns a DateTime (date + time)
+  /// 
+  /// Rules:
+  /// - "Hoje" only shown if the time would NOT be in the future
+  /// - "Ontem" always shown
+  /// - "Outro dia…" opens a date picker
+  Future<DateTime?> _showSmartDayPicker(TimeOfDay time) async {
     final now = DateTime.now();
-    final currentHour = now.hour;
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
     
-    // Default inteligente para contexto noturno:
-    // Se a hora escolhida é maior que a hora atual (ex: 23:00 quando são 08:00),
-    // provavelmente é de ontem à noite
-    final defaultIsYesterday = time.hour > currentHour + 2;
+    // Check if "today" with this time would be in the future
+    final todayWithTime = DateTime(today.year, today.month, today.day, time.hour, time.minute);
+    final isTodayFuture = todayWithTime.isAfter(now);
     
-    return showModalBottomSheet<String>(
+    // Default: if time is future for today, default to yesterday
+    final defaultIsYesterday = isTodayFuture || time.hour > now.hour + 2;
+    
+    final timeStr = '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    
+    final choice = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: NightTheme.surface,
-      builder: (context) => Container(
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(
+            // Handle bar
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: NightTheme.textSecondary.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            const Text(
               'Que dia?',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: NightTheme.textPrimary,
@@ -735,44 +921,72 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Hora escolhida: ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}',
+              'Hora escolhida: $timeStr',
               style: TextStyle(
                 fontSize: 14,
                 color: NightTheme.textSecondary,
               ),
             ),
+            
+            // Warning if today is not available
+            if (isTodayFuture) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade900.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.orange.shade300, size: 18),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Hoje às $timeStr ainda é futuro',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.orange.shade300,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             
-            // Hoje
-            FilledButton(
-              onPressed: () => Navigator.pop(context, 'today'),
-              style: FilledButton.styleFrom(
-                backgroundColor: defaultIsYesterday 
-                    ? NightTheme.surface 
-                    : NightTheme.primary,
-                foregroundColor: defaultIsYesterday 
-                    ? NightTheme.textPrimary 
-                    : Colors.white,
-                side: defaultIsYesterday 
-                    ? BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.3))
-                    : null,
-                padding: const EdgeInsets.symmetric(vertical: 16),
+            // Hoje (only if not future)
+            if (!isTodayFuture)
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx, 'today'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: defaultIsYesterday 
+                      ? NightTheme.surface 
+                      : NightTheme.primary,
+                  foregroundColor: defaultIsYesterday 
+                      ? NightTheme.textPrimary 
+                      : Colors.white,
+                  side: defaultIsYesterday 
+                      ? BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.3))
+                      : null,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: const Text('Hoje'),
               ),
-              child: const Text('Hoje'),
-            ),
-            const SizedBox(height: 12),
+            if (!isTodayFuture) const SizedBox(height: 12),
             
             // Ontem
             FilledButton(
-              onPressed: () => Navigator.pop(context, 'yesterday'),
+              onPressed: () => Navigator.pop(ctx, 'yesterday'),
               style: FilledButton.styleFrom(
-                backgroundColor: defaultIsYesterday 
+                backgroundColor: (defaultIsYesterday || isTodayFuture)
                     ? NightTheme.primary 
                     : NightTheme.surface,
-                foregroundColor: defaultIsYesterday 
+                foregroundColor: (defaultIsYesterday || isTodayFuture)
                     ? Colors.white 
                     : NightTheme.textPrimary,
-                side: defaultIsYesterday 
+                side: (defaultIsYesterday || isTodayFuture)
                     ? null
                     : BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.3)),
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -781,18 +995,89 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             ),
             const SizedBox(height: 12),
             
+            // Outro dia
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pop(ctx, 'other'),
+              icon: const Icon(Icons.calendar_today, size: 18),
+              label: const Text('Outro dia…'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: NightTheme.textPrimary,
+                side: BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.3)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+            const SizedBox(height: 12),
+            
             // Cancelar
             TextButton(
-              onPressed: () => Navigator.pop(context, null),
+              onPressed: () => Navigator.pop(ctx, null),
               child: Text(
                 'Cancelar',
                 style: TextStyle(color: NightTheme.textSecondary),
               ),
             ),
+            
+            SizedBox(height: MediaQuery.of(ctx).padding.bottom),
           ],
         ),
       ),
     );
+    
+    if (choice == null || !mounted) return null;
+    
+    DateTime selectedDate;
+    
+    switch (choice) {
+      case 'today':
+        selectedDate = today;
+      case 'yesterday':
+        selectedDate = yesterday;
+      case 'other':
+        // Show date picker (max = today)
+        final picked = await showDatePicker(
+          context: context,
+          initialDate: yesterday,
+          firstDate: DateTime.now().subtract(const Duration(days: 365)),
+          lastDate: now,
+          helpText: 'Escolher dia',
+          builder: (context, child) {
+            return Theme(
+              data: Theme.of(context).copyWith(
+                colorScheme: const ColorScheme.dark(
+                  primary: NightTheme.primary,
+                  onPrimary: NightTheme.backgroundTop,
+                  surface: NightTheme.backgroundBase,
+                  onSurface: NightTheme.textPrimary,
+                ),
+              ),
+              child: child!,
+            );
+          },
+        );
+        if (picked == null) return null;
+        selectedDate = picked;
+      default:
+        return null;
+    }
+    
+    // Combine date + time
+    final result = DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+      time.hour,
+      time.minute,
+    );
+    
+    // Final validation: never allow future
+    if (result.isAfter(now)) {
+      if (mounted) {
+        _showErrorSnackBar('Não é possível registar sono no futuro');
+      }
+      return null;
+    }
+    
+    return result;
   }
 
   /// Bottom sheet para perguntar intenção: ainda a dormir vs sono completo
@@ -876,6 +1161,17 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       );
       debugPrint('[HomeSleep] SleepStart created successfully');
       // Note: addEvent() already updates state - no refresh() needed
+    } on OverlapException catch (e) {
+      debugPrint('[HomeSleep] CreateStartEvent overlap: ${e.overlappingSessions.length} sessions');
+      if (mounted) {
+        final shouldReplace = await _showOverlapModal(e.overlappingSessions, e.message);
+        if (shouldReplace == true && mounted) {
+          await _overwriteSessionsAndCreateStart(
+            overlappingSessions: e.overlappingSessions,
+            newStartTime: startTime,
+          );
+        }
+      }
     } catch (e, stack) {
       debugPrint('[HomeSleep] Error creating SleepStart: $e');
       debugPrint('[HomeSleep] Stack: $stack');
@@ -889,90 +1185,117 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     }
   }
 
-  /// Wizard para registar sono completo (2 passos: início + fim)
+  /// Wizard para registar sono completo (4 passos: dia início + hora início + dia fim + hora fim)
   Future<void> _showCompleteSleepFlow(DateTime initialStart) async {
     debugPrint('[HomeSleep] Complete sleep flow started with: $initialStart');
-    DateTime startTime = initialStart;
+    final now = DateTime.now();
     
-    // Passo 1: Confirmar/ajustar hora de início
-    final startTimeOfDay = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(startTime),
-      helpText: 'Hora de início do sono',
+    // === PASSO 1: Escolher dia do INÍCIO ===
+    final startDate = await _showDatePickerForSleep(
+      title: 'Quando começou o sono?',
+      initialDate: initialStart,
+      maxDate: now,
     );
-    
-    if (startTimeOfDay == null) {
-      debugPrint('[HomeSleep] Start time picker cancelled');
+    if (startDate == null || !mounted) {
+      debugPrint('[HomeSleep] Start date cancelled');
       return;
     }
-    if (!mounted) return;
     
-    // Reconstruir startTime com a hora ajustada (mantendo o dia)
-    startTime = DateTime(
-      startTime.year,
-      startTime.month,
-      startTime.day,
+    // === PASSO 2: Escolher hora do INÍCIO ===
+    final startTimeOfDay = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(initialStart),
+      helpText: 'Hora de início do sono',
+    );
+    if (startTimeOfDay == null || !mounted) {
+      debugPrint('[HomeSleep] Start time cancelled');
+      return;
+    }
+    
+    DateTime startTime = DateTime(
+      startDate.year,
+      startDate.month,
+      startDate.day,
       startTimeOfDay.hour,
       startTimeOfDay.minute,
     );
-    debugPrint('[HomeSleep] Start time adjusted to: $startTime');
     
-    // Passo 2: Escolher hora de fim
-    final endTimeOfDay = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(
-        startTime.add(const Duration(hours: 2)),
-      ),
-      helpText: 'Hora de fim do sono',
-    );
-    
-    if (endTimeOfDay == null) {
-      debugPrint('[HomeSleep] End time picker cancelled');
+    // Validate start is not in future
+    if (startTime.isAfter(now)) {
+      _showErrorSnackBar('A hora de início não pode estar no futuro');
       return;
     }
-    if (!mounted) return;
+    debugPrint('[HomeSleep] Start: $startTime');
     
-    // Construir endTime no mesmo dia que startTime
+    // === PASSO 3: Escolher dia do FIM ===
+    // Min date = start date, max date = today
+    final endDate = await _showDatePickerForSleep(
+      title: 'Quando acordou?',
+      initialDate: startTime, // Default to same day
+      minDate: startDate,
+      maxDate: now,
+    );
+    if (endDate == null || !mounted) {
+      debugPrint('[HomeSleep] End date cancelled');
+      return;
+    }
+    
+    // === PASSO 4: Escolher hora do FIM ===
+    final defaultEndTime = startTime.add(const Duration(hours: 2));
+    final endTimeOfDay = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(defaultEndTime),
+      helpText: 'Hora de fim do sono',
+    );
+    if (endTimeOfDay == null || !mounted) {
+      debugPrint('[HomeSleep] End time cancelled');
+      return;
+    }
+    
     DateTime endTime = DateTime(
-      startTime.year,
-      startTime.month,
-      startTime.day,
+      endDate.year,
+      endDate.month,
+      endDate.day,
       endTimeOfDay.hour,
       endTimeOfDay.minute,
     );
-    debugPrint('[HomeSleep] End time initial: $endTime');
+    debugPrint('[HomeSleep] End (initial): $endTime');
     
-    // Se end <= start, assumir que atravessou meia-noite (fim no dia seguinte)
-    if (!endTime.isAfter(startTime)) {
-      debugPrint('[HomeSleep] End <= Start, showing midnight dialog');
+    // === VALIDAÇÕES ===
+    
+    // Se mesmo dia e end <= start, perguntar sobre meia-noite
+    final sameDay = startDate.year == endDate.year &&
+                    startDate.month == endDate.month &&
+                    startDate.day == endDate.day;
+    
+    if (sameDay && !endTime.isAfter(startTime)) {
+      debugPrint('[HomeSleep] Same day, end <= start, showing midnight dialog');
       final crossMidnight = await _showCrossMidnightDialog(startTime, endTime);
-      if (crossMidnight == null) {
-        debugPrint('[HomeSleep] Midnight dialog cancelled');
+      if (crossMidnight == null || !mounted) {
         return;
       }
-      if (!mounted) return;
-      
       if (crossMidnight) {
         endTime = endTime.add(const Duration(days: 1));
-        debugPrint('[HomeSleep] End time adjusted for midnight: $endTime');
+        debugPrint('[HomeSleep] Adjusted for midnight: $endTime');
       } else {
-        debugPrint('[HomeSleep] User chose to correct, returning');
         return;
       }
     }
     
-    // Verificar se fim está no futuro
-    final now = DateTime.now();
+    // Validar end > start
+    if (!endTime.isAfter(startTime)) {
+      _showErrorSnackBar('A hora de fim deve ser depois da hora de início');
+      return;
+    }
+    
+    // Validar end não está no futuro
     if (endTime.isAfter(now)) {
-      debugPrint('[HomeSleep] End is in future, showing dialog');
+      debugPrint('[HomeSleep] End is in future');
       final adjusted = await _showFutureEndDialog(endTime);
-      if (adjusted == null) {
-        debugPrint('[HomeSleep] Future end dialog cancelled');
+      if (adjusted == null || !mounted) {
         return;
       }
-      if (!mounted) return;
       endTime = adjusted;
-      debugPrint('[HomeSleep] End time adjusted to: $endTime');
     }
     
     // Criar sessão completa
@@ -986,6 +1309,18 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       );
       debugPrint('[HomeSleep] Session created successfully');
       // Note: createSleepSession already calls refresh() internally
+    } on OverlapException catch (e) {
+      debugPrint('[HomeSleep] Session overlap: ${e.overlappingSessions.length} sessions');
+      if (mounted) {
+        final shouldReplace = await _showOverlapModal(e.overlappingSessions, e.message);
+        if (shouldReplace == true && mounted) {
+          await _overwriteSessionsAndCreateSession(
+            overlappingSessions: e.overlappingSessions,
+            newStartTime: startTime,
+            newEndTime: endTime,
+          );
+        }
+      }
     } catch (e, stack) {
       debugPrint('[HomeSleep] Error creating session: $e');
       debugPrint('[HomeSleep] Stack: $stack');
@@ -997,6 +1332,53 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
         setState(() => _isActionLoading = false);
       }
     }
+  }
+
+  /// Date picker styled for sleep registration
+  /// 
+  /// [title] - Title shown in the picker
+  /// [initialDate] - Initial date to show
+  /// [minDate] - Minimum selectable date (defaults to 1 year ago)
+  /// [maxDate] - Maximum selectable date (defaults to now)
+  Future<DateTime?> _showDatePickerForSleep({
+    required String title,
+    required DateTime initialDate,
+    DateTime? minDate,
+    DateTime? maxDate,
+  }) async {
+    final now = DateTime.now();
+    final effectiveMinDate = minDate ?? now.subtract(const Duration(days: 365));
+    final effectiveMaxDate = maxDate ?? now;
+    
+    // Ensure initialDate is within bounds
+    DateTime effectiveInitial = initialDate;
+    if (effectiveInitial.isBefore(effectiveMinDate)) {
+      effectiveInitial = effectiveMinDate;
+    }
+    if (effectiveInitial.isAfter(effectiveMaxDate)) {
+      effectiveInitial = effectiveMaxDate;
+    }
+    
+    return showDatePicker(
+      context: context,
+      initialDate: effectiveInitial,
+      firstDate: effectiveMinDate,
+      lastDate: effectiveMaxDate,
+      helpText: title,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: NightTheme.primary,
+              onPrimary: NightTheme.backgroundTop,
+              surface: NightTheme.backgroundBase,
+              onSurface: NightTheme.textPrimary,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
   }
 
   /// Diálogo para confirmar que o sono atravessou meia-noite
@@ -1138,44 +1520,6 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     );
   }
 
-  /// Diálogo para quando o utilizador escolhe uma hora no futuro
-  Future<DateTime?> _showFutureTimeDialog(DateTime futureTime) async {
-    return showDialog<DateTime>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: NightTheme.surface,
-        title: const Text(
-          'Hora no futuro',
-          style: TextStyle(color: NightTheme.textPrimary),
-        ),
-        content: const Text(
-          'Não podes registar uma hora no futuro.\n\nO que queres fazer?',
-          style: TextStyle(color: NightTheme.textSecondary),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, null),
-            child: Text(
-              'Cancelar',
-              style: TextStyle(color: NightTheme.textSecondary),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, DateTime.now()),
-            child: const Text('Usar agora'),
-          ),
-          FilledButton(
-            onPressed: () {
-              // Registar como ontem (mesma hora, -1 dia)
-              final yesterday = futureTime.subtract(const Duration(days: 1));
-              Navigator.pop(context, yesterday);
-            },
-            child: const Text('Ontem'),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 /// PrimarySleepButton - Botão circular central

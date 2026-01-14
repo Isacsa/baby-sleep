@@ -37,6 +37,18 @@ abstract class SleepEventLocalDataSource {
   /// This ensures "sono completo" never leaves Start orphaned.
   Future<Result<void, Failure>> saveEventsInTransaction(List<SleepEventModel> events);
 
+  /// Saves AND updates events atomically in a single SQLite transaction
+  /// 
+  /// Used for "Substituir" flow:
+  /// - [inserts]: New events to create (correction events + new sleep events)
+  /// - [updates]: Existing events to mark as corrected (isCorrected=true, correctedBy=...)
+  /// 
+  /// All operations happen in a single transaction - if any fails, ALL are rolled back.
+  Future<Result<void, Failure>> saveAndUpdateEventsInTransaction({
+    required List<SleepEventModel> inserts,
+    required List<SleepEventModel> updates,
+  });
+
   /// Updates event in local storage
   Future<Result<void, Failure>> updateEvent(SleepEventModel event);
 

@@ -33,18 +33,46 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
     final eventsAsync = ref.watch(sleepEventsNotifierProvider);
     final events = eventsAsync.value ?? [];
     
-    // Filter events for selected day
-    final dayEvents = events.where((e) => _isSameDay(e.timestamp, _selectedDate)).toList();
-    final sessions = SleepSession.fromEventList(dayEvents);
+    // Derive ALL sessions from timeline (not just events from this day)
+    final allSessions = SleepSession.fromEventList(events);
     
-    // Calculate totals
+    // Calculate day boundaries (local time)
+    final selectedLocal = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    final dayStartLocal = selectedLocal;
+    final dayEndLocal = selectedLocal.add(const Duration(days: 1)).subtract(const Duration(milliseconds: 1));
+    final now = DateTime.now();
+    final isToday = _isSameDay(now, _selectedDate);
+    
+    // Filter sessions that OVERLAP with the selected day
+    // A session overlaps if: sessionStart <= dayEnd AND sessionEnd >= dayStart
+    final sessions = allSessions.where((session) {
+      final sessionStartLocal = session.startEvent.timestamp.toLocal();
+      // For open sessions: use "now" if today, otherwise use day end
+      final sessionEndLocal = session.endEvent?.timestamp.toLocal() 
+          ?? (isToday ? now : dayEndLocal);
+      
+      return !sessionStartLocal.isAfter(dayEndLocal) && !sessionEndLocal.isBefore(dayStartLocal);
+    }).toList();
+    
+    // Calculate totals with CLIPPED duration (only count time within the day)
     Duration totalSleep = Duration.zero;
     int napCount = 0;
     
     for (final session in sessions) {
-      if (session.duration != null) {
-        totalSleep += session.duration!;
-        if (session.duration!.inHours < 3) {
+      final sessionStartLocal = session.startEvent.timestamp.toLocal();
+      final sessionEndLocal = session.endEvent?.timestamp.toLocal() 
+          ?? (isToday ? now : dayEndLocal);
+      
+      // Clip to day boundaries
+      final clipStart = sessionStartLocal.isBefore(dayStartLocal) ? dayStartLocal : sessionStartLocal;
+      final clipEnd = sessionEndLocal.isAfter(dayEndLocal) ? dayEndLocal : sessionEndLocal;
+      
+      if (clipEnd.isAfter(clipStart)) {
+        final clippedDuration = clipEnd.difference(clipStart);
+        totalSleep += clippedDuration;
+        
+        // Count as nap if clipped duration < 3 hours
+        if (clippedDuration.inHours < 3) {
           napCount++;
         }
       }
@@ -116,7 +144,10 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
                     if (sessions.isEmpty)
                       _buildEmptyState()
                     else
-                      ...sessions.reversed.map((session) => _SessionTile(session: session)),
+                      ...sessions.reversed.map((session) => _SessionTile(
+                        session: session,
+                        selectedDate: _selectedDate,
+                      )),
                   ],
                 ),
               ),
@@ -223,26 +254,47 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
 
 class _SessionTile extends StatelessWidget {
   final SleepSession session;
+  final DateTime selectedDate;
 
-  const _SessionTile({required this.session});
+  const _SessionTile({required this.session, required this.selectedDate});
 
   @override
   Widget build(BuildContext context) {
     final start = session.startEvent.timestamp.toLocal();
     final end = session.endEvent?.timestamp.toLocal();
     
+    // Check if session crosses day boundaries
+    final selectedDay = DateTime(selectedDate.year, selectedDate.month, selectedDate.day);
+    final startDay = DateTime(start.year, start.month, start.day);
+    final endDay = end != null ? DateTime(end.year, end.month, end.day) : null;
+    
+    final startsBeforeToday = startDay.isBefore(selectedDay);
+    final endsAfterToday = endDay != null && endDay.isAfter(selectedDay);
+    
     String timeRange;
     String durationText;
+    String? crossMidnightNote;
     
     if (end != null) {
-      timeRange = '${_formatTime(start)} - ${_formatTime(end)}';
+      // Build time range with cross-midnight indicators
+      final startStr = startsBeforeToday ? '(ontem) ${_formatTime(start)}' : _formatTime(start);
+      final endStr = endsAfterToday ? '${_formatTime(end)} (amanhã)' : _formatTime(end);
+      timeRange = '$startStr - $endStr';
+      
       final duration = session.duration!;
       final hours = duration.inHours;
       final minutes = duration.inMinutes % 60;
       durationText = hours > 0 ? '${hours}h ${minutes}m' : '${minutes}m';
+      
+      if (startsBeforeToday || endsAfterToday) {
+        crossMidnightNote = 'Atravessa meia-noite';
+      }
     } else {
       timeRange = '${_formatTime(start)} - em curso';
       durationText = 'A dormir...';
+      if (startsBeforeToday) {
+        crossMidnightNote = 'Começou ontem';
+      }
     }
 
     final isNap = session.duration != null && session.duration!.inHours < 3;
@@ -289,12 +341,33 @@ class _SessionTile extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  isNap ? 'Sesta' : 'Sono noturno',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: NightTheme.textSecondary,
-                  ),
+                Row(
+                  children: [
+                    Text(
+                      isNap ? 'Sesta' : 'Sono noturno',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: NightTheme.textSecondary,
+                      ),
+                    ),
+                    if (crossMidnightNote != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: NightTheme.secondary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          crossMidnightNote,
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: NightTheme.secondary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),

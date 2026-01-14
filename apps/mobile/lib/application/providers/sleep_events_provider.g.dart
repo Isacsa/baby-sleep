@@ -7,7 +7,7 @@ part of 'sleep_events_provider.dart';
 // **************************************************************************
 
 String _$sleepEventsNotifierHash() =>
-    r'aa5780da1b5d682869318d27eeec756c6404bfc9';
+    r'e89534453d81afcff6da3a941193585c566efe05';
 
 /// Sleep events provider
 ///
