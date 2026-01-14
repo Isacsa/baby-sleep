@@ -27,6 +27,10 @@ part 'sleep_events_provider.g.dart';
 /// Also exposes actions for creating events (offline-first)
 @riverpod
 class SleepEventsNotifier extends _$SleepEventsNotifier {
+  // Concurrency guard: tracks current baby and invalidates stale refreshes
+  String? _currentBabyId;
+  int _refreshSeq = 0;
+
   // Use getters to create fresh instances on each access
   // This avoids LateInitializationError when provider rebuilds
   SleepEventLocalDataSourceImpl get _localDataSource => SleepEventLocalDataSourceImpl();
@@ -67,13 +71,44 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
 
   @override
   Future<List<SleepEvent>> build() async {
+    // Use ref.watch to subscribe to baby changes and trigger rebuild
     final activeBaby = ref.watch(activeBabyProvider);
     
     if (activeBaby == null) {
+      _currentBabyId = null;
       return [];
     }
 
-    return _loadEvents(activeBaby.id);
+    // Track the baby for this build
+    final isSameBaby = _currentBabyId == activeBaby.id;
+    _currentBabyId = activeBaby.id;
+    
+    // Increment seq for this build - makes any previous build/refresh stale
+    final mySeq = ++_refreshSeq;
+    
+    // ignore: avoid_print
+    print('[SleepEventsProvider] build() started: babyId=${activeBaby.id}, seq=$mySeq, isSameBaby=$isSameBaby');
+    
+    final events = await _loadEvents(activeBaby.id);
+    
+    // Check if we're still the most recent operation
+    // If addEvent() or refresh() happened during our async load, they would have incremented seq
+    if (_refreshSeq != mySeq) {
+      // ignore: avoid_print
+      print('[SleepEventsProvider] build() stale: seq changed from $mySeq to $_refreshSeq, using current state');
+      // Someone else updated the state - use their data instead
+      // This prevents build() from overwriting addEvent()'s state
+      final currentValue = state.value;
+      if (currentValue != null) {
+        return currentValue;
+      }
+      // If no current value, use what we loaded
+      return events;
+    }
+    
+    // ignore: avoid_print
+    print('[SleepEventsProvider] build() completed: ${events.length} events, seq=$mySeq');
+    return events;
   }
 
   /// Loads events from SQLite
@@ -93,21 +128,109 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
   }
 
   /// Refreshes events from local database
+  /// 
+  /// Uses copyWithPrevious ONLY for same baby (avoids flickering).
+  /// When baby changes, shows clean loading (no stale data from previous baby).
+  /// Uses _refreshSeq to ignore stale refreshes that complete after addEvent.
   Future<void> refresh() async {
     final activeBaby = ref.read(activeBabyProvider);
     if (activeBaby == null) {
       state = const AsyncData([]);
+      _currentBabyId = null;
       return;
     }
     
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(() => _loadEvents(activeBaby.id));
+    // Increment seq to invalidate any previous refresh in flight
+    final mySeq = ++_refreshSeq;
+    
+    // Check if this is same baby (for copyWithPrevious decision)
+    final isSameBaby = _currentBabyId == activeBaby.id;
+    _currentBabyId = activeBaby.id;
+    
+    if (isSameBaby) {
+      // Same baby: preserve previous data during loading (no flicker)
+      state = const AsyncLoading<List<SleepEvent>>().copyWithPrevious(state);
+    } else {
+      // Different baby: clean loading (don't show events from previous baby)
+      state = const AsyncLoading();
+    }
+    
+    final result = await AsyncValue.guard(() => _loadEvents(activeBaby.id));
+    
+    // Only apply result if we're still the most recent refresh
+    // (addEvent or another refresh may have updated state since we started)
+    if (_refreshSeq == mySeq) {
+      state = result;
+    }
+    // Otherwise: ignore stale result, newer data is already in state
   }
 
   /// Adds a new event (after local persistence)
+  /// 
+  /// Increments _refreshSeq to invalidate any refresh in flight.
+  /// This prevents a slow refresh from overwriting the newly added event.
   void addEvent(SleepEvent event) {
+    // Invalidate any refresh in progress - our data is fresher
+    _refreshSeq++;
+    
     final currentEvents = state.value ?? [];
     state = AsyncData([event, ...currentEvents]);
+  }
+
+  /// Checks if a timestamp falls within an existing sleep session
+  /// 
+  /// Returns the session (start, end) if overlap found, null otherwise.
+  /// Sessions are derived from SleepStart/SleepEnd pairs in chronological order.
+  ({DateTime start, DateTime? end})? _findOverlappingSession(DateTime timestamp, List<SleepEvent> events) {
+    if (events.isEmpty) return null;
+    
+    // Sort events by timestamp ASC for easier session pairing
+    final sortedEvents = events.where((e) => e.isValid).toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    
+    // Build sessions from Start/End pairs
+    DateTime? sessionStart;
+    
+    for (final event in sortedEvents) {
+      if (event.type == SleepEventType.sleepStart) {
+        // Check if timestamp falls within a previous open session
+        if (sessionStart != null && timestamp.isAfter(sessionStart) && timestamp.isBefore(event.timestamp)) {
+          // This would be between an unclosed start and the next start - unusual but check
+        }
+        sessionStart = event.timestamp;
+      } else if (event.type == SleepEventType.sleepEnd && sessionStart != null) {
+        // Check if timestamp falls within this session
+        if (timestamp.isAfter(sessionStart) && timestamp.isBefore(event.timestamp)) {
+          return (start: sessionStart, end: event.timestamp);
+        }
+        // Also check if timestamp equals start or end (edge case)
+        if (timestamp.isAtSameMomentAs(sessionStart) || timestamp.isAtSameMomentAs(event.timestamp)) {
+          return (start: sessionStart, end: event.timestamp);
+        }
+        sessionStart = null; // Session closed
+      }
+    }
+    
+    // Check if timestamp falls within an open session (no end yet)
+    if (sessionStart != null && timestamp.isAfter(sessionStart)) {
+      return (start: sessionStart, end: null);
+    }
+    
+    return null;
+  }
+
+  /// Formats a session for display in error messages
+  String _formatSession(({DateTime start, DateTime? end}) session) {
+    final startLocal = session.start.toLocal();
+    final startStr = '${startLocal.hour.toString().padLeft(2, '0')}:${startLocal.minute.toString().padLeft(2, '0')}';
+    
+    if (session.end != null) {
+      final endLocal = session.end!.toLocal();
+      final endStr = '${endLocal.hour.toString().padLeft(2, '0')}:${endLocal.minute.toString().padLeft(2, '0')}';
+      return '$startStr - $endStr';
+    } else {
+      return 'desde $startStr (em curso)';
+    }
   }
 
   /// Internal helper for creating SleepStart events
@@ -117,14 +240,27 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
   /// 
   /// Throws [SleepEventException] if creation fails (e.g., no caregiver permission).
   Future<void> _createSleepStartInternal(DateTime timestamp) async {
-    // ignore: avoid_print
-    print('[SleepEventsProvider] _createSleepStartInternal called with: $timestamp');
-    
+    // DEBUG LOGS: Context information for debugging
     final user = ref.read(authProvider);
     final activeBaby = ref.read(activeBabyProvider);
+    final currentEvents = state.value ?? [];
+    final lastEvent = currentEvents.isNotEmpty ? currentEvents.first : null;
+    final isSleeping = lastEvent?.type == SleepEventType.sleepStart;
     
     // ignore: avoid_print
-    print('[SleepEventsProvider] user=${user?.id}, baby=${activeBaby?.id}');
+    print('[DEBUG] ===== _createSleepStartInternal =====');
+    // ignore: avoid_print
+    print('[DEBUG] activeBabyId: ${activeBaby?.id}');
+    // ignore: avoid_print
+    print('[DEBUG] isSleeping: $isSleeping');
+    // ignore: avoid_print
+    print('[DEBUG] lastEvent: ${lastEvent?.type.name} at ${lastEvent?.timestamp}');
+    // ignore: avoid_print
+    print('[DEBUG] requested timestamp: $timestamp');
+    // ignore: avoid_print
+    print('[DEBUG] events count: ${currentEvents.length}');
+    // ignore: avoid_print
+    print('[DEBUG] =====================================');
     
     if (user == null) {
       throw const SleepEventException('Utilizador não autenticado');
@@ -134,12 +270,22 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
       throw const SleepEventException('Nenhum bebé selecionado');
     }
     
+    // Check for overlap with existing sessions
+    final timestampUtc = timestamp.toUtc();
+    final overlappingSession = _findOverlappingSession(timestampUtc, currentEvents);
+    if (overlappingSession != null) {
+      final sessionStr = _formatSession(overlappingSession);
+      // ignore: avoid_print
+      print('[SleepEventsProvider] Overlap detected: $sessionStr');
+      throw SleepEventException('Já existe sono registado nesse período ($sessionStr)');
+    }
+    
     final now = DateTime.now().toUtc();
     final eventId = UuidGenerator.generate();
     final deviceId = await DeviceIdManager.getDeviceId();
     
     // ignore: avoid_print
-    print('[SleepEventsProvider] Executing use case with timestamp=${timestamp.toUtc()}');
+    print('[SleepEventsProvider] Executing use case with timestamp=$timestampUtc');
     
     final result = await _createSleepStartUseCase.execute(
       babyId: activeBaby.id,

@@ -135,9 +135,12 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
                   
                   const SizedBox(height: 32),
                   
-                  // Quick time chips
-                  if (canCreateEvents && !sleepState.isSleeping)
-                    _buildQuickTimeChips(),
+                  // Quick time chips - different based on sleep state
+                  if (canCreateEvents)
+                    if (!sleepState.isSleeping)
+                      _buildQuickTimeChips() // AWAKE: 5/10/15 min + Outra hora
+                    else
+                      _buildRetroactiveOnlyChip(), // SLEEPING: apenas "Outra hora (sono anterior)"
                   
                   const Spacer(),
                 ],
@@ -356,6 +359,27 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     );
   }
 
+  /// Chip shown when baby is SLEEPING - allows registering past sleep sessions
+  Widget _buildRetroactiveOnlyChip() {
+    return Column(
+      children: [
+        Text(
+          'Registar sono anterior:',
+          style: TextStyle(
+            fontSize: 14,
+            color: NightTheme.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        QuickTimeChip(
+          label: 'Outra hora (sono anterior)',
+          icon: Icons.history,
+          onTap: _handleCustomTimeWhileSleeping,
+        ),
+      ],
+    );
+  }
+
   Future<void> _handleSleepAction() async {
     // GUARDRAIL 3: Validate context BEFORE any action
     if (!_validateContextBeforeAction()) return;
@@ -373,8 +397,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
         await ref.read(sleepEventsNotifierProvider.notifier).createSleepStart();
       }
       debugPrint('[HomeSleep] SleepAction completed successfully');
-      // Refresh to ensure state is updated
-      await ref.read(sleepEventsNotifierProvider.notifier).refresh();
+      // Note: addEvent() already updates state - no refresh() needed
     } catch (e, stack) {
       debugPrint('[HomeSleep] SleepAction error: $e');
       debugPrint('[HomeSleep] Stack: $stack');
@@ -429,8 +452,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
         timestamp,
       );
       debugPrint('[HomeSleep] QuickStart created successfully');
-      // Refresh to ensure state is updated
-      await ref.read(sleepEventsNotifierProvider.notifier).refresh();
+      // Note: addEvent() already updates state - no refresh() needed
     } catch (e, stack) {
       debugPrint('[HomeSleep] QuickStart error: $e');
       debugPrint('[HomeSleep] Stack: $stack');
@@ -442,6 +464,177 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
         setState(() => _isActionLoading = false);
       }
     }
+  }
+
+  /// Handler for "Outra hora" when baby is already SLEEPING
+  /// Shows modal with options: End now / Register past sleep / Cancel
+  Future<void> _handleCustomTimeWhileSleeping() async {
+    // GUARDRAIL 3: Validate context BEFORE any action
+    if (!_validateContextBeforeAction()) return;
+    
+    final sleepState = ref.read(sleepStateNotifierProvider);
+    debugPrint('[HomeSleep] CustomTimeWhileSleeping: isSleeping=${sleepState.isSleeping}');
+    
+    // Show modal with options
+    final choice = await _showAlreadySleepingModal(sleepState.lastEventTimestamp);
+    if (choice == null || !mounted) return;
+    
+    switch (choice) {
+      case _SleepingModalChoice.endNow:
+        debugPrint('[HomeSleep] User chose: End now');
+        await _handleEndSleepNow();
+        
+      case _SleepingModalChoice.registerPastSleep:
+        debugPrint('[HomeSleep] User chose: Register past sleep');
+        // Use a default start time (2 hours ago) for the wizard
+        final defaultStart = DateTime.now().subtract(const Duration(hours: 2));
+        await _showCompleteSleepFlow(defaultStart);
+        
+      case _SleepingModalChoice.cancel:
+        debugPrint('[HomeSleep] User chose: Cancel');
+        // Do nothing
+    }
+  }
+
+  /// Shows modal when user tries to register sleep while baby is already sleeping
+  Future<_SleepingModalChoice?> _showAlreadySleepingModal(DateTime? sleepingSince) async {
+    final sinceStr = sleepingSince != null
+        ? '${sleepingSince.toLocal().hour.toString().padLeft(2, '0')}:${sleepingSince.toLocal().minute.toString().padLeft(2, '0')}'
+        : 'hora desconhecida';
+    
+    return showModalBottomSheet<_SleepingModalChoice>(
+      context: context,
+      backgroundColor: NightTheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: NightTheme.textSecondary.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            // Title
+            Row(
+              children: [
+                Icon(Icons.bedtime, color: NightTheme.primary, size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Já está a dormir desde $sinceStr',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: NightTheme.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'O que queres fazer?',
+              style: TextStyle(
+                fontSize: 14,
+                color: NightTheme.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Option 1: End now
+            FilledButton.icon(
+              onPressed: () => Navigator.pop(context, _SleepingModalChoice.endNow),
+              icon: const Icon(Icons.stop_circle_outlined),
+              label: const Text('Terminar sono agora'),
+              style: FilledButton.styleFrom(
+                backgroundColor: NightTheme.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Option 2: Register past sleep
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pop(context, _SleepingModalChoice.registerPastSleep),
+              icon: const Icon(Icons.history),
+              label: const Text('Registar sono completo do passado'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: NightTheme.textPrimary,
+                side: BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.3)),
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+            const SizedBox(height: 12),
+            
+            // Option 3: Cancel
+            TextButton(
+              onPressed: () => Navigator.pop(context, _SleepingModalChoice.cancel),
+              child: Text(
+                'Cancelar',
+                style: TextStyle(color: NightTheme.textSecondary),
+              ),
+            ),
+            
+            // Bottom padding for safe area
+            SizedBox(height: MediaQuery.of(context).padding.bottom),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Handles ending the current sleep session
+  Future<void> _handleEndSleepNow() async {
+    setState(() => _isActionLoading = true);
+    try {
+      await ref.read(sleepEventsNotifierProvider.notifier).createSleepEnd();
+      debugPrint('[HomeSleep] Sleep ended successfully');
+      if (mounted) {
+        _showSuccessSnackBar('Sono terminado');
+      }
+    } catch (e, stack) {
+      debugPrint('[HomeSleep] Error ending sleep: $e');
+      debugPrint('[HomeSleep] Stack: $stack');
+      if (mounted) {
+        _showErrorSnackBar(e.toString());
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isActionLoading = false);
+      }
+    }
+  }
+
+  /// Shows a success snackbar
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle, color: Colors.white),
+            const SizedBox(width: 8),
+            Text(message),
+          ],
+        ),
+        backgroundColor: Colors.green.shade700,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _handleCustomTime() async {
@@ -682,8 +875,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
         startTime,
       );
       debugPrint('[HomeSleep] SleepStart created successfully');
-      // Refresh to ensure state is updated
-      await ref.read(sleepEventsNotifierProvider.notifier).refresh();
+      // Note: addEvent() already updates state - no refresh() needed
     } catch (e, stack) {
       debugPrint('[HomeSleep] Error creating SleepStart: $e');
       debugPrint('[HomeSleep] Stack: $stack');
@@ -793,9 +985,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
         endTime: endTime,
       );
       debugPrint('[HomeSleep] Session created successfully');
-      // Refresh events to ensure state is updated
-      await ref.read(sleepEventsNotifierProvider.notifier).refresh();
-      debugPrint('[HomeSleep] Events refreshed');
+      // Note: createSleepSession already calls refresh() internally
     } catch (e, stack) {
       debugPrint('[HomeSleep] Error creating session: $e');
       debugPrint('[HomeSleep] Stack: $stack');
@@ -923,11 +1113,20 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             const Icon(Icons.error_outline, color: Colors.white, size: 20),
             const SizedBox(width: 8),
             Expanded(child: Text(message)),
+            // X button to dismiss
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 20),
+              onPressed: () {
+                ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              },
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
           ],
         ),
         backgroundColor: NightTheme.error,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 4),
+        duration: const Duration(seconds: 6),
         action: onRetry != null
             ? SnackBarAction(
                 label: 'Tentar',
@@ -1112,4 +1311,11 @@ class _SleepTimerState extends State<_SleepTimer> {
       ),
     );
   }
+}
+
+/// Enum for modal choices when baby is already sleeping
+enum _SleepingModalChoice {
+  endNow,
+  registerPastSleep,
+  cancel,
 }
