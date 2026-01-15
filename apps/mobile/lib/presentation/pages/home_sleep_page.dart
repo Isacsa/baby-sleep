@@ -6,7 +6,9 @@ import 'package:temp_flutter/application/providers/sleep_state_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/application/providers/sync_provider.dart';
 import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
+import 'package:temp_flutter/core/utils/device_id_manager.dart';
 import 'package:temp_flutter/domain/entities/baby.dart';
+import 'package:temp_flutter/domain/entities/sleep_event.dart';
 import 'package:temp_flutter/domain/value_objects/sleep_session.dart';
 import 'package:temp_flutter/presentation/theme/night_theme.dart';
 import 'package:temp_flutter/presentation/widgets/sync_status_chip.dart';
@@ -30,6 +32,10 @@ class HomeSleepPage extends ConsumerStatefulWidget {
 class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
   bool _isActionLoading = false;
   ProviderSubscription<Baby?>? _babySubscription;
+  ProviderSubscription<AsyncValue<List<SleepEvent>>>? _eventsSubscription;
+  
+  /// Track which conflicts we've already shown to avoid repeated prompts
+  final Set<String> _handledConflictIds = {};
 
   @override
   void initState() {
@@ -44,16 +50,31 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
         (previous, next) {
           if (previous?.id != next?.id) {
             debugPrint('[HomeSleep] Baby changed: ${previous?.id} -> ${next?.id}');
+            _handledConflictIds.clear(); // Clear handled conflicts for new baby
             _onBabyChanged();
           }
         },
       );
+      
+      // Listen for events changes to detect multi-device conflicts
+      _eventsSubscription = ref.listenManual<AsyncValue<List<SleepEvent>>>(
+        sleepEventsNotifierProvider,
+        (previous, next) {
+          if (next.hasValue) {
+            _checkForDuplicateConflicts();
+          }
+        },
+      );
+      
+      // Initial check for conflicts
+      _checkForDuplicateConflicts();
     });
   }
 
   @override
   void dispose() {
     _babySubscription?.close();
+    _eventsSubscription?.close();
     super.dispose();
   }
 
@@ -74,6 +95,124 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
 
   Future<void> _ensureCaregiverContext() async {
     await ref.read(caregiverContextProvider.notifier).ensureContext();
+  }
+
+  /// Checks for duplicate SleepStart conflicts (multi-device) and shows resolution modal
+  void _checkForDuplicateConflicts() {
+    if (!mounted) return;
+    
+    final conflicts = ref.read(sleepEventsNotifierProvider.notifier).detectDuplicateStartConflicts();
+    
+    if (conflicts.isEmpty) return;
+    
+    // Only show conflicts we haven't handled yet
+    for (final conflict in conflicts) {
+      // Create a unique ID for this conflict based on event IDs
+      final conflictId = conflict.events.map((e) => e.id).toList()..sort();
+      final conflictKey = conflictId.join('_');
+      
+      if (!_handledConflictIds.contains(conflictKey)) {
+        _handledConflictIds.add(conflictKey);
+        
+        // Show snackbar + modal for this conflict
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _showDuplicateConflictSnackBar(conflict);
+          }
+        });
+        
+        // Only show one conflict at a time
+        break;
+      }
+    }
+  }
+
+  /// Shows snackbar alerting about duplicate conflict and opens modal
+  void _showDuplicateConflictSnackBar(DuplicateStartConflict conflict) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.white),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Detectámos registos duplicados em múltiplos dispositivos. Precisamos da tua confirmação.',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 18),
+              onPressed: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.orange.shade800,
+        duration: const Duration(seconds: 10),
+        action: SnackBarAction(
+          label: 'Resolver',
+          textColor: Colors.white,
+          onPressed: () => _showDuplicateConflictModal(conflict),
+        ),
+      ),
+    );
+  }
+
+  /// Shows modal for user to choose which SleepStart to keep
+  Future<void> _showDuplicateConflictModal(DuplicateStartConflict conflict) async {
+    final currentDeviceId = await DeviceIdManager.getDeviceId();
+    
+    if (!mounted) return;
+    
+    final selectedEventId = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: NightTheme.surface,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => _DuplicateConflictSheet(
+        conflict: conflict,
+        currentDeviceId: currentDeviceId,
+      ),
+    );
+    
+    if (selectedEventId == null || !mounted) {
+      debugPrint('[HomeSleep] DuplicateConflict modal cancelled');
+      return;
+    }
+    
+    debugPrint('[HomeSleep] User chose to keep event: $selectedEventId');
+    
+    try {
+      setState(() => _isActionLoading = true);
+      
+      await ref.read(sleepEventsNotifierProvider.notifier).resolveDuplicateConflict(
+        keepEventId: selectedEventId,
+        conflictEvents: conflict.events,
+      );
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Conflito resolvido com sucesso'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[HomeSleep] Error resolving conflict: $e');
+      if (mounted) {
+        _showErrorSnackBar('Erro ao resolver conflito: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isActionLoading = false);
+      }
+    }
   }
 
   @override
@@ -1662,4 +1801,233 @@ enum _SleepingModalChoice {
   endNow,
   registerPastSleep,
   cancel,
+}
+
+/// Bottom sheet for resolving duplicate SleepStart conflicts (multi-device)
+class _DuplicateConflictSheet extends StatelessWidget {
+  final DuplicateStartConflict conflict;
+  final String currentDeviceId;
+
+  const _DuplicateConflictSheet({
+    required this.conflict,
+    required this.currentDeviceId,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: NightTheme.textSecondary.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+            
+            // Icon and title
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade900.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    Icons.devices,
+                    color: Colors.orange.shade300,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Conflito de dispositivos',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600,
+                          color: NightTheme.textPrimary,
+                        ),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        'Foram registados inícios de sono em dispositivos diferentes. Escolhe qual manter:',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: NightTheme.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            
+            // List of conflicting events
+            ...conflict.events.asMap().entries.map((entry) {
+              final index = entry.key;
+              final event = entry.value;
+              final isThisDevice = event.deviceId == currentDeviceId;
+              final isSuggested = index == 0; // First is the suggested winner (most recent createdAt)
+              
+              return _buildEventOption(
+                context: context,
+                event: event,
+                isThisDevice: isThisDevice,
+                isSuggested: isSuggested,
+                onTap: () => Navigator.pop(context, event.id),
+              );
+            }),
+            
+            const SizedBox(height: 16),
+            
+            // Cancel button
+            TextButton(
+              onPressed: () => Navigator.pop(context, null),
+              child: Text(
+                'Cancelar (resolver depois)',
+                style: TextStyle(color: NightTheme.textSecondary),
+              ),
+            ),
+            
+            SizedBox(height: MediaQuery.of(context).padding.bottom),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEventOption({
+    required BuildContext context,
+    required SleepEvent event,
+    required bool isThisDevice,
+    required bool isSuggested,
+    required VoidCallback onTap,
+  }) {
+    final timeLocal = event.timestamp.toLocal();
+    final createdLocal = event.createdAt.toLocal();
+    
+    final timeStr = '${timeLocal.hour.toString().padLeft(2, '0')}:${timeLocal.minute.toString().padLeft(2, '0')}';
+    final createdStr = '${createdLocal.hour.toString().padLeft(2, '0')}:${createdLocal.minute.toString().padLeft(2, '0')}:${createdLocal.second.toString().padLeft(2, '0')}';
+    
+    final deviceLabel = isThisDevice ? 'Este dispositivo' : 'Outro dispositivo';
+    final deviceColor = isThisDevice ? NightTheme.primary : NightTheme.secondary;
+    
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: NightTheme.backgroundBase,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSuggested 
+                    ? NightTheme.primary.withValues(alpha: 0.5)
+                    : NightTheme.textSecondary.withValues(alpha: 0.2),
+                width: isSuggested ? 2 : 1,
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  isThisDevice ? Icons.phone_iphone : Icons.devices_other,
+                  color: deviceColor,
+                  size: 24,
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            'Início: $timeStr',
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: NightTheme.textPrimary,
+                            ),
+                          ),
+                          if (isSuggested) ...[
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: NightTheme.primary.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text(
+                                'Sugerido',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: NightTheme.primary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: deviceColor.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              deviceLabel,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: deviceColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Criado às $createdStr',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: NightTheme.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right,
+                  color: NightTheme.textSecondary,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

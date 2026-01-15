@@ -135,9 +135,24 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
   /// Uses _refreshSeq to ignore stale refreshes that complete after addEvent.
   Future<void> refresh() async {
     final activeBaby = ref.read(activeBabyProvider);
+    
+    // === DEBUG LOG H3: Refresh sequence tracking ===
+    // ignore: avoid_print
+    print('[SleepEventsProvider][H3-DEBUG] ===== REFRESH CALLED =====');
+    // ignore: avoid_print
+    print('[SleepEventsProvider][H3-DEBUG] activeBaby: ${activeBaby?.id ?? 'null'}');
+    // ignore: avoid_print
+    print('[SleepEventsProvider][H3-DEBUG] currentBabyId: $_currentBabyId');
+    // ignore: avoid_print
+    print('[SleepEventsProvider][H3-DEBUG] currentSeq: $_refreshSeq');
+    // ignore: avoid_print
+    print('[SleepEventsProvider][H3-DEBUG] stateBeforeCount: ${state.value?.length ?? 'null (loading/error)'}');
+    
     if (activeBaby == null) {
       state = const AsyncData([]);
       _currentBabyId = null;
+      // ignore: avoid_print
+      print('[SleepEventsProvider][H3-DEBUG] No active baby, reset to empty');
       return;
     }
     
@@ -147,6 +162,9 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     // Check if this is same baby (for copyWithPrevious decision)
     final isSameBaby = _currentBabyId == activeBaby.id;
     _currentBabyId = activeBaby.id;
+    
+    // ignore: avoid_print
+    print('[SleepEventsProvider][H3-DEBUG] isSameBaby: $isSameBaby, mySeq: $mySeq');
     
     if (isSameBaby) {
       // Same baby: preserve previous data during loading (no flicker)
@@ -162,8 +180,17 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     // (addEvent or another refresh may have updated state since we started)
     if (_refreshSeq == mySeq) {
       state = result;
+      // ignore: avoid_print
+      print('[SleepEventsProvider][H3-DEBUG] Applied result: ${result.value?.length ?? 'error/loading'} events');
+    } else {
+      // ignore: avoid_print
+      print('[SleepEventsProvider][H3-DEBUG] STALE refresh (mySeq=$mySeq, current=$_refreshSeq) - result DISCARDED');
     }
-    // Otherwise: ignore stale result, newer data is already in state
+    
+    // ignore: avoid_print
+    print('[SleepEventsProvider][H3-DEBUG] stateAfterCount: ${state.value?.length ?? 'null'}');
+    // ignore: avoid_print
+    print('[SleepEventsProvider][H3-DEBUG] ===== REFRESH END =====');
   }
 
   /// Adds a new event (after local persistence)
@@ -836,6 +863,187 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     
     await refresh();
   }
+
+  // ========== MULTI-DEVICE CONFLICT DETECTION AND RESOLUTION ==========
+
+  /// Time window for detecting duplicate SleepStart events (multi-device)
+  /// 
+  /// Must match SleepSession.duplicateTimeWindow for consistency.
+  /// Set to 5 minutes to handle realistic multi-device scenarios where users
+  /// might tap "Start sleep" on different devices with some delay.
+  static const Duration _duplicateTimeWindow = Duration(minutes: 5);
+
+  /// Detects duplicate SleepStart conflicts in the current events
+  /// 
+  /// A conflict is when there are 2+ valid SleepStart events with timestamps
+  /// within the duplicate time window (likely from multiple devices).
+  /// 
+  /// Returns list of conflict groups (empty if no conflicts).
+  List<DuplicateStartConflict> detectDuplicateStartConflicts() {
+    final events = state.value ?? [];
+    final validStarts = events
+        .where((e) => e.isValid && e.type == SleepEventType.sleepStart)
+        .toList()
+      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    
+    if (validStarts.length < 2) return [];
+    
+    final conflicts = <DuplicateStartConflict>[];
+    final processed = <String>{};
+    
+    for (var i = 0; i < validStarts.length; i++) {
+      final event = validStarts[i];
+      if (processed.contains(event.id)) continue;
+      
+      // Find all events within the time window
+      final duplicates = <SleepEvent>[event];
+      
+      for (var j = i + 1; j < validStarts.length; j++) {
+        final other = validStarts[j];
+        if (processed.contains(other.id)) continue;
+        
+        final timeDiff = other.timestamp.difference(event.timestamp).abs();
+        if (timeDiff < _duplicateTimeWindow) {
+          duplicates.add(other);
+        }
+      }
+      
+      if (duplicates.length > 1) {
+        // Sort by createdAt DESC to suggest keeping the most recent
+        duplicates.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        
+        conflicts.add(DuplicateStartConflict(
+          events: duplicates,
+          conflictTimestamp: event.timestamp,
+        ));
+        
+        for (final dup in duplicates) {
+          processed.add(dup.id);
+        }
+      }
+    }
+    
+    // ignore: avoid_print
+    print('[SleepEventsProvider] detectDuplicateStartConflicts: found ${conflicts.length} conflicts');
+    
+    return conflicts;
+  }
+
+  /// Resolves a duplicate conflict by keeping one event and marking others as corrected
+  /// 
+  /// [keepEventId] - The event ID to keep (winner)
+  /// [conflictEvents] - All events in the conflict group (including the winner)
+  /// 
+  /// Algorithm:
+  /// 1. For each loser event: mark as isCorrected=true, set correctedBy to correction event ID
+  /// 2. Create correction events for losers with metadata: correction_reason='duplicate_multi_device'
+  /// 3. Persist atomically via transaction
+  /// 
+  /// Throws [SleepEventException] if resolution fails.
+  Future<void> resolveDuplicateConflict({
+    required String keepEventId,
+    required List<SleepEvent> conflictEvents,
+  }) async {
+    // ignore: avoid_print
+    print('[SleepEventsProvider] resolveDuplicateConflict: keep=$keepEventId, total=${conflictEvents.length}');
+    
+    final user = ref.read(authProvider);
+    final activeBaby = ref.read(activeBabyProvider);
+    
+    if (user == null) {
+      throw const SleepEventException('Utilizador não autenticado');
+    }
+    
+    if (activeBaby == null) {
+      throw const SleepEventException('Nenhum bebé selecionado');
+    }
+    
+    // Validate that keepEventId is in conflictEvents
+    if (!conflictEvents.any((e) => e.id == keepEventId)) {
+      throw const SleepEventException('Evento a manter não encontrado');
+    }
+    
+    final losers = conflictEvents.where((e) => e.id != keepEventId).toList();
+    
+    if (losers.isEmpty) {
+      // No losers means no conflict to resolve
+      return;
+    }
+    
+    final now = DateTime.now().toUtc();
+    final deviceId = await DeviceIdManager.getDeviceId();
+    
+    final inserts = <SleepEventModel>[];
+    final updates = <SleepEventModel>[];
+    
+    for (final loser in losers) {
+      // Create correction event for loser
+      final correctionId = UuidGenerator.generate();
+      
+      // Mark loser as corrected
+      updates.add(SleepEventModel.fromDomain(
+        loser.copyWith(
+          isCorrected: true,
+          correctedBy: correctionId,
+        ),
+      ));
+      
+      // Create correction event (marks the original as invalid, points to it)
+      final correctionEvent = SleepEvent(
+        id: correctionId,
+        babyId: activeBaby.id,
+        type: SleepEventType.sleepStart,
+        timestamp: loser.timestamp,
+        caregiverId: loser.caregiverId,
+        deviceId: deviceId,
+        createdAt: now,
+        isCorrected: true,
+        syncedAt: null,
+        correctedBy: loser.id,
+        metadata: {'correction_reason': 'duplicate_multi_device', 'kept_event': keepEventId},
+      );
+      inserts.add(SleepEventModel.fromDomain(correctionEvent));
+    }
+    
+    // ignore: avoid_print
+    print('[SleepEventsProvider] resolveDuplicateConflict: ${inserts.length} inserts, ${updates.length} updates');
+    
+    final saveResult = await _localDataSource.saveAndUpdateEventsInTransaction(
+      inserts: inserts,
+      updates: updates,
+    );
+    
+    switch (saveResult) {
+      case Success():
+        // ignore: avoid_print
+        print('[SleepEventsProvider] Duplicate conflict resolved: kept $keepEventId');
+      case Error(:final failure):
+        throw SleepEventException(failure.message);
+    }
+    
+    // Refresh to update UI
+    await refresh();
+  }
+}
+
+/// Represents a group of duplicate SleepStart events from multiple devices
+class DuplicateStartConflict {
+  /// List of duplicate events (sorted by createdAt DESC - first is suggested winner)
+  final List<SleepEvent> events;
+  
+  /// The timestamp where the conflict was detected
+  final DateTime conflictTimestamp;
+  
+  const DuplicateStartConflict({
+    required this.events,
+    required this.conflictTimestamp,
+  });
+  
+  /// The suggested winner (most recently created)
+  SleepEvent get suggestedWinner => events.first;
+  
+  @override
+  String toString() => 'DuplicateStartConflict(timestamp: $conflictTimestamp, count: ${events.length})';
 }
 
 /// Exception thrown when sleep event creation fails

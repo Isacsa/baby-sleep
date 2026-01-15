@@ -506,12 +506,30 @@ class Sync extends _$Sync {
   /// - sleepStateNotifierProvider (derived from events, needs refresh)
   /// - caregiverContextProvider (needs to re-verify after sync)
   void _invalidateAfterSync() {
+    // === DEBUG LOG H3: Provider invalidation ===
+    // ignore: avoid_print
+    print('[SyncProvider][H3-DEBUG] ===== INVALIDATING PROVIDERS =====');
+    // ignore: avoid_print
+    print('[SyncProvider][H3-DEBUG] About to invalidate: caregivers, sleepEvents, sleepState, caregiverContext');
+    
     ref.invalidate(caregiversNotifierProvider);
+    // ignore: avoid_print
+    print('[SyncProvider][H3-DEBUG] Invalidated: caregiversNotifierProvider');
+    
     ref.invalidate(sleepEventsNotifierProvider);
+    // ignore: avoid_print
+    print('[SyncProvider][H3-DEBUG] Invalidated: sleepEventsNotifierProvider');
+    
     ref.invalidate(sleepStateNotifierProvider);
+    // ignore: avoid_print
+    print('[SyncProvider][H3-DEBUG] Invalidated: sleepStateNotifierProvider');
+    
     ref.invalidate(caregiverContextProvider);
     // ignore: avoid_print
-    print('[SyncProvider] Invalidated provider caches after sync');
+    print('[SyncProvider][H3-DEBUG] Invalidated: caregiverContextProvider');
+    
+    // ignore: avoid_print
+    print('[SyncProvider][H3-DEBUG] ===== INVALIDATION COMPLETE =====');
   }
 
   // ========== PULL CAREGIVERS ONLY ==========
