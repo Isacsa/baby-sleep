@@ -38,12 +38,14 @@ class SleepSession {
     );
   }
 
-  /// Time window for detecting duplicate SleepStart from multiple devices
-  /// 
-  /// IMPORTANT: Set to a generous window (5 minutes) to handle multi-device scenarios
-  /// where users might tap "Start sleep" on different devices with some delay.
-  /// A 1-second window was too narrow for realistic multi-device conflicts.
-  static const Duration duplicateTimeWindow = Duration(minutes: 5);
+  /// When a SleepStart appears while we already have an open SleepStart (no SleepEnd yet),
+  /// we treat it as a multi-device conflict/correction and NEVER emit a phantom incomplete
+  /// session for the previous start (which would create permanent overlap).
+  ///
+  /// Winner rule (deterministic, non-blocking):
+  /// - Keep the most recent start for derivation (later timestamp wins; if equal, later createdAt wins)
+  ///
+  /// The UI can still prompt the user to resolve/mark corrections, but derivation must stay usable.
 
   /// Groups events into sessions
   /// 
@@ -51,9 +53,9 @@ class SleepSession {
   /// 1. Filter valid events (isCorrected = false)
   /// 2. Sort by timestamp ASC, then createdAt ASC
   /// 3. Group consecutive SleepStart/SleepEnd pairs
-  /// 4. Handle duplicate SleepStart (multi-device): if two SleepStart have
-  ///    timestamps within 1 second, keep the one with latest createdAt (winner)
-  ///    and ignore the other for session derivation (avoids phantom incomplete sessions)
+  /// 4. If a SleepStart occurs while there is already an open SleepStart (no SleepEnd yet),
+  ///    treat it as a conflict and keep a deterministic winner for derivation (most recent start).
+  ///    Never emit a phantom incomplete session for the previous start.
   /// 5. If last event is SleepStart without SleepEnd: incomplete session
   static List<SleepSession> fromEventList(List<SleepEvent> events, {bool debug = false}) {
     // Filter valid events and sort by timestamp ASC, createdAt ASC
@@ -87,44 +89,28 @@ class SleepSession {
 
     final sessions = <SleepSession>[];
     SleepEvent? currentStart;
-    int duplicatesDetected = 0;
+    int conflictsDetected = 0;
 
     for (final event in validEvents) {
       if (event.type == SleepEventType.sleepStart) {
         if (currentStart != null) {
-          // Check if this is a duplicate from multi-device (timestamps within 1 second)
-          final timeDiff = event.timestamp.difference(currentStart.timestamp).abs();
-          
-          if (timeDiff < duplicateTimeWindow) {
-            duplicatesDetected++;
-            // Duplicate detected: keep the one with latest createdAt (winner)
-            // This prevents phantom incomplete sessions from multi-device conflicts
-            if (debug) {
-              // ignore: avoid_print
-              print('[SleepSession][H2-DEBUG] DUPLICATE Start detected: ${event.id.substring(0, 8)} vs ${currentStart.id.substring(0, 8)} (diff=${timeDiff.inMilliseconds}ms)');
-            }
-            if (event.createdAt.isAfter(currentStart.createdAt)) {
-              // New event is the winner - replace currentStart
-              if (debug) {
-                // ignore: avoid_print
-                print('[SleepSession][H2-DEBUG]   Winner: ${event.id.substring(0, 8)} (newer createdAt)');
-              }
-              currentStart = event;
-            } else {
-              if (debug) {
-                // ignore: avoid_print
-                print('[SleepSession][H2-DEBUG]   Winner: ${currentStart.id.substring(0, 8)} (older event kept)');
-              }
-            }
-            // Otherwise keep currentStart (it's the winner)
-            // Either way, we DON'T create an incomplete session for the loser
-          } else {
-            // Not a duplicate - previous start is truly incomplete
-            if (debug) {
-              // ignore: avoid_print
-              print('[SleepSession][H2-DEBUG] Incomplete session (no End before next Start): ${currentStart.id.substring(0, 8)}');
-            }
-            sessions.add(SleepSession.fromEvents(startEvent: currentStart));
+          // Conflict: SleepStart while another is still open (no SleepEnd yet).
+          // Never emit a phantom incomplete session for the previous start (would cause overlap).
+          conflictsDetected++;
+
+          // Choose winner deterministically: most recent start wins (later timestamp, then createdAt)
+          final shouldReplace = event.timestamp.isAfter(currentStart.timestamp) ||
+              (event.timestamp.isAtSameMomentAs(currentStart.timestamp) &&
+                  event.createdAt.isAfter(currentStart.createdAt));
+
+          if (debug) {
+            // ignore: avoid_print
+            print('[SleepSession][H2-DEBUG] CONFLICT Start while open: ${event.id.substring(0, 8)} vs ${currentStart.id.substring(0, 8)}');
+            // ignore: avoid_print
+            print('[SleepSession][H2-DEBUG]   Keeping: ${(shouldReplace ? event.id.substring(0, 8) : currentStart.id.substring(0, 8))}');
+          }
+
+          if (shouldReplace) {
             currentStart = event;
           }
         } else {
@@ -165,7 +151,7 @@ class SleepSession {
       // ignore: avoid_print
       print('[SleepSession][H2-DEBUG] Sessions derived: ${sessions.length} (complete: ${sessions.where((s) => s.isComplete).length}, incomplete: ${sessions.where((s) => !s.isComplete).length})');
       // ignore: avoid_print
-      print('[SleepSession][H2-DEBUG] Duplicates detected and merged: $duplicatesDetected');
+      print('[SleepSession][H2-DEBUG] Start-while-open conflicts detected and merged: $conflictsDetected');
       // ignore: avoid_print
       print('[SleepSession][H2-DEBUG] ===== END DERIVATION =====');
     }

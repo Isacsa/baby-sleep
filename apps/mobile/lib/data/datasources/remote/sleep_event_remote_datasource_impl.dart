@@ -87,8 +87,8 @@ class SleepEventRemoteDataSourceImpl implements SleepEventRemoteDataSource {
     try {
       _ensureAuthenticated();
 
-      // Use created_at for pull (not synced_at)
-      // Backend uses created_at as source of truth for ordering
+      // LEGACY: Use created_at for pull
+      // @deprecated Use getNewRemoteEventsByCursor for reliable incremental sync
       var filterBuilder = _client
           .from('sleep_events')
           .select()
@@ -105,6 +105,67 @@ class SleepEventRemoteDataSourceImpl implements SleepEventRemoteDataSource {
       final response = await query;
       final events = (response as List)
           .map((json) => SleepEventModel.fromJson(json as Map<String, dynamic>))
+          .toList();
+
+      return Success(events);
+    } catch (e) {
+      return Error(_mapError(e));
+    }
+  }
+
+  @override
+  Future<Result<List<SleepEventModel>, Failure>> getNewRemoteEventsByCursor({
+    required String babyId,
+    DateTime? cursorSyncedAt,
+    String? cursorId,
+    int limit = 200,
+  }) async {
+    try {
+      _ensureAuthenticated();
+
+      // Use composite cursor (synced_at, id) for reliable incremental pull
+      // synced_at is server-generated, eliminating clock-skew issues
+      // 
+      // Filter: (synced_at > cursorSyncedAt) OR (synced_at = cursorSyncedAt AND id > cursorId)
+      // Order: synced_at ASC, id ASC
+      
+      final query = _client
+          .from('sleep_events')
+          .select()
+          .eq('baby_id', babyId);
+
+      List<Map<String, dynamic>> response;
+      
+      if (cursorSyncedAt == null) {
+        // First pull: get all events ordered by synced_at, id
+        response = await query
+            .order('synced_at', ascending: true)
+            .order('id', ascending: true)
+            .limit(limit);
+      } else {
+        // Incremental pull with composite cursor
+        // PostgREST doesn't support OR directly, so we use .or() filter
+        final cursorSyncedAtStr = cursorSyncedAt.toUtc().toIso8601String();
+        
+        if (cursorId != null) {
+          // Full composite cursor: (synced_at > cursor) OR (synced_at = cursor AND id > cursorId)
+          response = await query
+              .or('synced_at.gt.$cursorSyncedAtStr,and(synced_at.eq.$cursorSyncedAtStr,id.gt.$cursorId)')
+              .order('synced_at', ascending: true)
+              .order('id', ascending: true)
+              .limit(limit);
+        } else {
+          // Only synced_at cursor (legacy migration path)
+          response = await query
+              .gt('synced_at', cursorSyncedAtStr)
+              .order('synced_at', ascending: true)
+              .order('id', ascending: true)
+              .limit(limit);
+        }
+      }
+
+      final events = response
+          .map((json) => SleepEventModel.fromJson(json))
           .toList();
 
       return Success(events);
@@ -153,11 +214,17 @@ class SleepEventRemoteDataSourceImpl implements SleepEventRemoteDataSource {
       _ensureAuthenticated();
 
       // Only update mutable fields
-      final updateData = {
+      // Note: synced_at is NOT set here - server trigger sets it to NOW() on UPDATE
+      // This ensures synced_at is always server-generated for reliable incremental sync
+      final updateData = <String, dynamic>{
         'is_corrected': event.isCorrected,
         'corrected_by': event.correctedBy,
-        'synced_at': DateTime.now().toUtc().toIso8601String(),
       };
+
+      // Include metadata if present
+      if (event.metadata != null) {
+        updateData['metadata'] = event.metadata;
+      }
 
       final response = await _client
           .from('sleep_events')
@@ -194,11 +261,12 @@ class SleepEventRemoteDataSourceImpl implements SleepEventRemoteDataSource {
   }
 
   /// Prepares event model for insert
-  /// Ensures synced_at is set to now
+  /// Note: synced_at is NOT set here - server trigger sets it to NOW() on INSERT
+  /// This ensures synced_at is always server-generated for reliable incremental sync
   Map<String, dynamic> _prepareEventForInsert(SleepEventModel event) {
     final json = event.toJson();
-    // Set synced_at to now (server time will be used by Supabase)
-    json['synced_at'] = DateTime.now().toUtc().toIso8601String();
+    // Remove synced_at if present - server trigger will set it
+    json.remove('synced_at');
     return json;
   }
 

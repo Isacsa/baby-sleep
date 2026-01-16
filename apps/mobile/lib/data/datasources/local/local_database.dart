@@ -7,7 +7,7 @@ import 'package:path/path.dart';
 /// Used for offline-first persistence
 class LocalDatabase {
   static const String _databaseName = 'baby_sleep.db';
-  static const int _databaseVersion = 3;
+  static const int _databaseVersion = 5;
 
   // Singleton instance
   static LocalDatabase? _instance;
@@ -122,11 +122,13 @@ class LocalDatabase {
       CREATE INDEX idx_caregivers_unsynced ON caregivers (synced_at) WHERE synced_at IS NULL
     ''');
 
-    // Create sync_state table for tracking last synced timestamp per baby
+    // Create sync_state table for tracking last synced cursor per baby
+    // Uses composite cursor (last_synced_at, last_synced_id) for reliable incremental pull
     await db.execute('''
       CREATE TABLE sync_state (
         baby_id TEXT PRIMARY KEY NOT NULL,
         last_synced_at TEXT NOT NULL,
+        last_synced_id TEXT,
         updated_at TEXT NOT NULL,
         FOREIGN KEY (baby_id) REFERENCES babies (id)
       )
@@ -134,6 +136,21 @@ class LocalDatabase {
 
     await db.execute('''
       CREATE INDEX idx_sync_state_baby_id ON sync_state (baby_id)
+    ''');
+
+    // Create sync queue table for tracking pending sync operations
+    // Supports both INSERT (new events) and UPDATE (normalization corrections)
+    await db.execute('''
+      CREATE TABLE sleep_event_sync_queue (
+        event_id TEXT PRIMARY KEY NOT NULL,
+        action TEXT NOT NULL,
+        enqueued_at TEXT NOT NULL,
+        FOREIGN KEY (event_id) REFERENCES sleep_events (id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE INDEX idx_sync_queue_action ON sleep_event_sync_queue (action, enqueued_at)
     ''');
   }
 
@@ -174,6 +191,40 @@ class LocalDatabase {
       ''');
       await db.execute('''
         CREATE INDEX IF NOT EXISTS idx_caregivers_unsynced ON caregivers (synced_at) WHERE synced_at IS NULL
+      ''');
+    }
+
+    if (oldVersion < 4) {
+      // Migration to version 4: Add last_synced_id to sync_state
+      // 
+      // WHY: Enable composite cursor (synced_at, id) for reliable incremental pull
+      // Using synced_at alone can miss events when multiple events have same synced_at
+      // The composite cursor (synced_at, id) with server-generated synced_at eliminates:
+      // - Clock skew issues (synced_at is server-time, not client-time)
+      // - Duplicate/missed events (id provides tie-breaker)
+      
+      await db.execute('ALTER TABLE sync_state ADD COLUMN last_synced_id TEXT');
+    }
+
+    if (oldVersion < 5) {
+      // Migration to version 5: Add sync queue table
+      // 
+      // WHY: Support both INSERT and UPDATE operations for sync
+      // - INSERT: new events created locally
+      // - UPDATE: events corrected by normalizer
+      // This enables the normalizer to mark events for remote sync
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS sleep_event_sync_queue (
+          event_id TEXT PRIMARY KEY NOT NULL,
+          action TEXT NOT NULL,
+          enqueued_at TEXT NOT NULL,
+          FOREIGN KEY (event_id) REFERENCES sleep_events (id)
+        )
+      ''');
+
+      await db.execute('''
+        CREATE INDEX IF NOT EXISTS idx_sync_queue_action ON sleep_event_sync_queue (action, enqueued_at)
       ''');
     }
   }

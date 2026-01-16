@@ -136,23 +136,24 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
   Future<void> refresh() async {
     final activeBaby = ref.read(activeBabyProvider);
     
+    void dbg(String msg) {
+      assert(() {
+        // ignore: avoid_print
+        print(msg);
+        return true;
+      }());
+    }
     // === DEBUG LOG H3: Refresh sequence tracking ===
-    // ignore: avoid_print
-    print('[SleepEventsProvider][H3-DEBUG] ===== REFRESH CALLED =====');
-    // ignore: avoid_print
-    print('[SleepEventsProvider][H3-DEBUG] activeBaby: ${activeBaby?.id ?? 'null'}');
-    // ignore: avoid_print
-    print('[SleepEventsProvider][H3-DEBUG] currentBabyId: $_currentBabyId');
-    // ignore: avoid_print
-    print('[SleepEventsProvider][H3-DEBUG] currentSeq: $_refreshSeq');
-    // ignore: avoid_print
-    print('[SleepEventsProvider][H3-DEBUG] stateBeforeCount: ${state.value?.length ?? 'null (loading/error)'}');
+    dbg('[SleepEventsProvider][H3-DEBUG] ===== REFRESH CALLED =====');
+    dbg('[SleepEventsProvider][H3-DEBUG] activeBaby: ${activeBaby?.id ?? 'null'}');
+    dbg('[SleepEventsProvider][H3-DEBUG] currentBabyId: $_currentBabyId');
+    dbg('[SleepEventsProvider][H3-DEBUG] currentSeq: $_refreshSeq');
+    dbg('[SleepEventsProvider][H3-DEBUG] stateBeforeCount: ${state.value?.length ?? 'null (loading/error)'}');
     
     if (activeBaby == null) {
       state = const AsyncData([]);
       _currentBabyId = null;
-      // ignore: avoid_print
-      print('[SleepEventsProvider][H3-DEBUG] No active baby, reset to empty');
+      dbg('[SleepEventsProvider][H3-DEBUG] No active baby, reset to empty');
       return;
     }
     
@@ -163,8 +164,7 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     final isSameBaby = _currentBabyId == activeBaby.id;
     _currentBabyId = activeBaby.id;
     
-    // ignore: avoid_print
-    print('[SleepEventsProvider][H3-DEBUG] isSameBaby: $isSameBaby, mySeq: $mySeq');
+    dbg('[SleepEventsProvider][H3-DEBUG] isSameBaby: $isSameBaby, mySeq: $mySeq');
     
     if (isSameBaby) {
       // Same baby: preserve previous data during loading (no flicker)
@@ -180,17 +180,13 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     // (addEvent or another refresh may have updated state since we started)
     if (_refreshSeq == mySeq) {
       state = result;
-      // ignore: avoid_print
-      print('[SleepEventsProvider][H3-DEBUG] Applied result: ${result.value?.length ?? 'error/loading'} events');
+      dbg('[SleepEventsProvider][H3-DEBUG] Applied result: ${result.value?.length ?? 'error/loading'} events');
     } else {
-      // ignore: avoid_print
-      print('[SleepEventsProvider][H3-DEBUG] STALE refresh (mySeq=$mySeq, current=$_refreshSeq) - result DISCARDED');
+      dbg('[SleepEventsProvider][H3-DEBUG] STALE refresh (mySeq=$mySeq, current=$_refreshSeq) - result DISCARDED');
     }
     
-    // ignore: avoid_print
-    print('[SleepEventsProvider][H3-DEBUG] stateAfterCount: ${state.value?.length ?? 'null'}');
-    // ignore: avoid_print
-    print('[SleepEventsProvider][H3-DEBUG] ===== REFRESH END =====');
+    dbg('[SleepEventsProvider][H3-DEBUG] stateAfterCount: ${state.value?.length ?? 'null'}');
+    dbg('[SleepEventsProvider][H3-DEBUG] ===== REFRESH END =====');
   }
 
   /// Adds a new event (after local persistence)
@@ -866,61 +862,76 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
 
   // ========== MULTI-DEVICE CONFLICT DETECTION AND RESOLUTION ==========
 
-  /// Time window for detecting duplicate SleepStart events (multi-device)
-  /// 
-  /// Must match SleepSession.duplicateTimeWindow for consistency.
-  /// Set to 5 minutes to handle realistic multi-device scenarios where users
-  /// might tap "Start sleep" on different devices with some delay.
-  static const Duration _duplicateTimeWindow = Duration(minutes: 5);
-
   /// Detects duplicate SleepStart conflicts in the current events
   /// 
-  /// A conflict is when there are 2+ valid SleepStart events with timestamps
-  /// within the duplicate time window (likely from multiple devices).
+  /// A conflict is when a SleepStart appears while there is already an open SleepStart
+  /// (no SleepEnd in between). This indicates multi-device double-start or a correction.
   /// 
   /// Returns list of conflict groups (empty if no conflicts).
   List<DuplicateStartConflict> detectDuplicateStartConflicts() {
     final events = state.value ?? [];
-    final validStarts = events
-        .where((e) => e.isValid && e.type == SleepEventType.sleepStart)
+    final validEvents = events
+        .where((e) => e.isValid)
         .toList()
-      ..sort((a, b) => a.timestamp.compareTo(b.timestamp));
-    
-    if (validStarts.length < 2) return [];
+      ..sort((a, b) {
+        final timestampCompare = a.timestamp.compareTo(b.timestamp);
+        if (timestampCompare != 0) return timestampCompare;
+        return a.createdAt.compareTo(b.createdAt);
+      });
     
     final conflicts = <DuplicateStartConflict>[];
-    final processed = <String>{};
     
-    for (var i = 0; i < validStarts.length; i++) {
-      final event = validStarts[i];
-      if (processed.contains(event.id)) continue;
-      
-      // Find all events within the time window
-      final duplicates = <SleepEvent>[event];
-      
-      for (var j = i + 1; j < validStarts.length; j++) {
-        final other = validStarts[j];
-        if (processed.contains(other.id)) continue;
-        
-        final timeDiff = other.timestamp.difference(event.timestamp).abs();
-        if (timeDiff < _duplicateTimeWindow) {
-          duplicates.add(other);
+    SleepEvent? currentStart;
+    List<SleepEvent>? conflictStarts;
+    
+    for (final event in validEvents) {
+      if (event.type == SleepEventType.sleepStart) {
+        if (currentStart == null) {
+          currentStart = event;
+          continue;
         }
-      }
-      
-      if (duplicates.length > 1) {
-        // Sort by createdAt DESC to suggest keeping the most recent
-        duplicates.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         
-        conflicts.add(DuplicateStartConflict(
-          events: duplicates,
-          conflictTimestamp: event.timestamp,
-        ));
+        // Start while already open -> conflict group
+        conflictStarts ??= [currentStart];
+        conflictStarts.add(event);
         
-        for (final dup in duplicates) {
-          processed.add(dup.id);
+        // Winner for pairing is the most recent start (later timestamp, then createdAt)
+        currentStart = event;
+      } else if (event.type == SleepEventType.sleepEnd) {
+        // Close any conflict group when we see the end
+        if (conflictStarts != null && conflictStarts.length > 1) {
+          // Sort by createdAt DESC to suggest keeping the most recent action
+          final sorted = List<SleepEvent>.from(conflictStarts)
+            ..sort((a, b) {
+              final ts = b.timestamp.compareTo(a.timestamp);
+              if (ts != 0) return ts;
+              return b.createdAt.compareTo(a.createdAt);
+            });
+          
+          conflicts.add(DuplicateStartConflict(
+            events: sorted,
+            conflictTimestamp: sorted.last.timestamp, // earliest timestamp in group
+          ));
         }
+        
+        conflictStarts = null;
+        currentStart = null;
       }
+    }
+    
+    // If timeline ended with an open conflict group (no end yet), still surface it
+    if (conflictStarts != null && conflictStarts.length > 1) {
+      final sorted = List<SleepEvent>.from(conflictStarts)
+        ..sort((a, b) {
+          final ts = b.timestamp.compareTo(a.timestamp);
+          if (ts != 0) return ts;
+          return b.createdAt.compareTo(a.createdAt);
+        });
+      
+      conflicts.add(DuplicateStartConflict(
+        events: sorted,
+        conflictTimestamp: sorted.last.timestamp,
+      ));
     }
     
     // ignore: avoid_print

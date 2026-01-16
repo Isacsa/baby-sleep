@@ -457,5 +457,231 @@ class SleepEventLocalDataSourceImpl implements SleepEventLocalDataSource {
       return Error(StorageFailure('Failed to set last synced at: $e', originalError: e));
     }
   }
+
+  @override
+  Future<Result<SyncCursor, Failure>> getSyncCursor(String babyId) async {
+    try {
+      final db = await _localDatabase.database;
+      final maps = await db.query(
+        'sync_state',
+        where: 'baby_id = ?',
+        whereArgs: [babyId],
+        limit: 1,
+      );
+
+      if (maps.isEmpty) {
+        return Success(SyncCursor.initial());
+      }
+
+      final lastSyncedAtStr = maps.first['last_synced_at'] as String?;
+      final lastSyncedId = maps.first['last_synced_id'] as String?;
+
+      return Success(SyncCursor(
+        syncedAt: lastSyncedAtStr != null 
+            ? DateTime.parse(lastSyncedAtStr).toUtc() 
+            : null,
+        eventId: lastSyncedId,
+      ));
+    } catch (e) {
+      return Error(StorageFailure('Failed to get sync cursor: $e', originalError: e));
+    }
+  }
+
+  @override
+  Future<Result<void, Failure>> setSyncCursor(String babyId, SyncCursor cursor) async {
+    try {
+      final db = await _localDatabase.database;
+      final now = DateTime.now().toUtc().toIso8601String();
+      
+      await db.insert(
+        'sync_state',
+        {
+          'baby_id': babyId,
+          'last_synced_at': cursor.syncedAt?.toUtc().toIso8601String() ?? 
+              DateTime.fromMillisecondsSinceEpoch(0).toUtc().toIso8601String(),
+          'last_synced_id': cursor.eventId,
+          'updated_at': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      
+      return const Success(null);
+    } catch (e) {
+      return Error(StorageFailure('Failed to set sync cursor: $e', originalError: e));
+    }
+  }
+
+  @override
+  Future<Result<List<String>, Failure>> applyNormalizationUpdates(
+    List<NormalizationUpdate> updates,
+  ) async {
+    if (updates.isEmpty) {
+      return const Success([]);
+    }
+
+    try {
+      final db = await _localDatabase.database;
+      final updatedIds = <String>[];
+
+      await db.transaction((txn) async {
+        for (final update in updates) {
+          // Get existing metadata
+          final existing = await txn.query(
+            'sleep_events',
+            columns: ['metadata'],
+            where: 'id = ?',
+            whereArgs: [update.eventId],
+          );
+
+          Map<String, dynamic> newMetadata = {...update.metadataPatch};
+          
+          if (existing.isNotEmpty && existing.first['metadata'] != null) {
+            // Merge with existing metadata (patch overwrites on conflict)
+            final existingMetadata = jsonDecode(existing.first['metadata'] as String);
+            if (existingMetadata is Map<String, dynamic>) {
+              newMetadata = {...existingMetadata, ...update.metadataPatch};
+            }
+          }
+
+          // Update the event
+          await txn.update(
+            'sleep_events',
+            {
+              'is_corrected': 1,
+              'corrected_by': update.correctedBy,
+              'metadata': jsonEncode(newMetadata),
+            },
+            where: 'id = ?',
+            whereArgs: [update.eventId],
+          );
+
+          updatedIds.add(update.eventId);
+        }
+      });
+
+      return Success(updatedIds);
+    } catch (e) {
+      return Error(StorageFailure('Failed to apply normalization updates: $e', originalError: e));
+    }
+  }
+
+  // ============================================
+  // SYNC QUEUE METHODS
+  // ============================================
+
+  @override
+  Future<Result<void, Failure>> enqueueForSync(String eventId, SyncAction action) async {
+    try {
+      final db = await _localDatabase.database;
+      final now = DateTime.now().toUtc().toIso8601String();
+      
+      await db.insert(
+        'sleep_event_sync_queue',
+        {
+          'event_id': eventId,
+          'action': action.name,
+          'enqueued_at': now,
+        },
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      
+      return const Success(null);
+    } catch (e) {
+      return Error(StorageFailure('Failed to enqueue for sync: $e', originalError: e));
+    }
+  }
+
+  @override
+  Future<Result<void, Failure>> enqueueMultipleForSync(List<String> eventIds, SyncAction action) async {
+    if (eventIds.isEmpty) {
+      return const Success(null);
+    }
+
+    try {
+      final db = await _localDatabase.database;
+      final now = DateTime.now().toUtc().toIso8601String();
+      
+      final batch = db.batch();
+      for (final eventId in eventIds) {
+        batch.insert(
+          'sleep_event_sync_queue',
+          {
+            'event_id': eventId,
+            'action': action.name,
+            'enqueued_at': now,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+      await batch.commit(noResult: true);
+      
+      return const Success(null);
+    } catch (e) {
+      return Error(StorageFailure('Failed to enqueue multiple for sync: $e', originalError: e));
+    }
+  }
+
+  @override
+  Future<Result<void, Failure>> dequeueAfterSync(String eventId) async {
+    try {
+      final db = await _localDatabase.database;
+      
+      await db.delete(
+        'sleep_event_sync_queue',
+        where: 'event_id = ?',
+        whereArgs: [eventId],
+      );
+      
+      return const Success(null);
+    } catch (e) {
+      return Error(StorageFailure('Failed to dequeue after sync: $e', originalError: e));
+    }
+  }
+
+  @override
+  Future<Result<List<SyncQueueEntry>, Failure>> getPendingSyncEntries(SyncAction action) async {
+    try {
+      final db = await _localDatabase.database;
+      
+      final maps = await db.query(
+        'sleep_event_sync_queue',
+        where: 'action = ?',
+        whereArgs: [action.name],
+        orderBy: 'enqueued_at ASC',
+      );
+      
+      final entries = maps.map((map) => SyncQueueEntry(
+        eventId: map['event_id'] as String,
+        action: SyncAction.values.firstWhere((a) => a.name == map['action']),
+        enqueuedAt: DateTime.parse(map['enqueued_at'] as String).toUtc(),
+      )).toList();
+      
+      return Success(entries);
+    } catch (e) {
+      return Error(StorageFailure('Failed to get pending sync entries: $e', originalError: e));
+    }
+  }
+
+  @override
+  Future<Result<List<SyncQueueEntry>, Failure>> getAllPendingSyncEntries() async {
+    try {
+      final db = await _localDatabase.database;
+      
+      final maps = await db.query(
+        'sleep_event_sync_queue',
+        orderBy: 'enqueued_at ASC',
+      );
+      
+      final entries = maps.map((map) => SyncQueueEntry(
+        eventId: map['event_id'] as String,
+        action: SyncAction.values.firstWhere((a) => a.name == map['action']),
+        enqueuedAt: DateTime.parse(map['enqueued_at'] as String).toUtc(),
+      )).toList();
+      
+      return Success(entries);
+    } catch (e) {
+      return Error(StorageFailure('Failed to get all pending sync entries: $e', originalError: e));
+    }
+  }
 }
 

@@ -3,6 +3,7 @@ import 'package:temp_flutter/core/types/result.dart' as core;
 import 'package:temp_flutter/sync/sync_state.dart';
 import 'package:temp_flutter/sync/sync_pull_engine.dart';
 import 'package:temp_flutter/sync/layered_sync_orchestrator.dart';
+import 'package:temp_flutter/data/datasources/local/sleep_event_local_datasource.dart';
 import 'package:temp_flutter/data/datasources/local/sleep_event_local_datasource_impl.dart';
 import 'package:temp_flutter/data/datasources/local/baby_local_datasource_impl.dart';
 import 'package:temp_flutter/data/datasources/local/caregiver_local_datasource_impl.dart';
@@ -14,6 +15,7 @@ import 'package:temp_flutter/application/providers/caregivers_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_state_provider.dart';
 import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
+import 'package:temp_flutter/application/services/sleep_events_normalization_service.dart';
 
 part 'sync_provider.g.dart';
 
@@ -239,8 +241,11 @@ class Sync extends _$Sync {
   /// 2. Push local entities (baby/caregivers/events) via layered sync
   /// 3. If push fails with transient error, stop and report error
   /// 4. If push ok, pull caregivers + events from remote
-  /// 5. Set final state (success/error)
-  /// 6. Invalidate caches ONCE at the end
+  /// 5. Run normalizer to resolve multi-device conflicts (Start-Start)
+  /// 6. Enqueue normalized updates for sync
+  /// 7. Push event updates (is_corrected, corrected_by, metadata)
+  /// 8. Set final state (success/error)
+  /// 9. Invalidate caches ONCE at the end
   /// 
   /// The UI only needs to observe SyncState and call this single method.
   Future<void> syncNowForBaby(String babyId) async {
@@ -248,7 +253,9 @@ class Sync extends _$Sync {
     // ignore: avoid_print
     print('[SyncProvider] syncNowForBaby START: babyId=$babyId');
 
-    // Step 1: Push local changes
+    final eventLocalDataSource = SleepEventLocalDataSourceImpl();
+
+    // Step 1: Push local changes (inserts)
     final pushResult = await _orchestrator.syncForBaby(babyId);
 
     switch (pushResult) {
@@ -279,7 +286,6 @@ class Sync extends _$Sync {
     }
 
     // Step 2: Pull remote updates (caregivers + events)
-    // Using internal implementation to avoid double state transitions
     final caregiverRemoteDataSource = CaregiverRemoteDataSourceImpl();
     final caregiverLocalDataSource = CaregiverLocalDataSourceImpl();
 
@@ -312,6 +318,55 @@ class Sync extends _$Sync {
       // ignore: avoid_print
       print('[SyncProvider] syncNowForBaby FAILED (pull events): ${pullEventsResult.failureOrNull?.message}');
       return;
+    }
+
+    // Step 3: Run normalizer to resolve multi-device conflicts
+    // ignore: avoid_print
+    print('[SyncProvider] syncNowForBaby: running normalizer for baby $babyId');
+    
+    final normalizationService = SleepEventsNormalizationService(
+      localDataSource: eventLocalDataSource,
+    );
+    
+    final normalizeResult = await normalizationService.normalizeForBaby(babyId);
+    
+    if (normalizeResult.isError) {
+      // Normalization failed - log but continue (non-fatal)
+      // ignore: avoid_print
+      print('[SyncProvider] syncNowForBaby WARNING (normalize): ${normalizeResult.failureOrNull?.message}');
+    } else {
+      final normResult = normalizeResult.dataOrNull!;
+      // ignore: avoid_print
+      print('[SyncProvider] syncNowForBaby: normalization complete, ${normResult.updatedEventIds.length} events updated');
+      
+      // Step 4: Enqueue normalized updates for sync (if any)
+      if (normResult.hasUpdates) {
+        final enqueueResult = await eventLocalDataSource.enqueueMultipleForSync(
+          normResult.updatedEventIds,
+          SyncAction.update,
+        );
+        if (enqueueResult.isError) {
+          // ignore: avoid_print
+          print('[SyncProvider] syncNowForBaby WARNING (enqueue): ${enqueueResult.failureOrNull?.message}');
+        } else {
+          // ignore: avoid_print
+          print('[SyncProvider] syncNowForBaby: enqueued ${normResult.updatedEventIds.length} updates for sync');
+        }
+      }
+    }
+
+    // Step 5: Push event updates (corrections from normalizer)
+    final pushUpdatesResult = await _orchestrator.pushEventUpdatesForBaby(babyId);
+    
+    if (pushUpdatesResult.isError) {
+      // ignore: avoid_print
+      print('[SyncProvider] syncNowForBaby WARNING (push updates): ${pushUpdatesResult.failureOrNull?.message}');
+    } else {
+      final updResult = pushUpdatesResult.dataOrNull!;
+      if (updResult.successCount > 0) {
+        // ignore: avoid_print
+        print('[SyncProvider] syncNowForBaby: pushed ${updResult.successCount} event updates');
+      }
     }
 
     // Success!
@@ -506,30 +561,30 @@ class Sync extends _$Sync {
   /// - sleepStateNotifierProvider (derived from events, needs refresh)
   /// - caregiverContextProvider (needs to re-verify after sync)
   void _invalidateAfterSync() {
+    void dbg(String msg) {
+      assert(() {
+        // ignore: avoid_print
+        print(msg);
+        return true;
+      }());
+    }
     // === DEBUG LOG H3: Provider invalidation ===
-    // ignore: avoid_print
-    print('[SyncProvider][H3-DEBUG] ===== INVALIDATING PROVIDERS =====');
-    // ignore: avoid_print
-    print('[SyncProvider][H3-DEBUG] About to invalidate: caregivers, sleepEvents, sleepState, caregiverContext');
+    dbg('[SyncProvider][H3-DEBUG] ===== INVALIDATING PROVIDERS =====');
+    dbg('[SyncProvider][H3-DEBUG] About to invalidate: caregivers, sleepEvents, sleepState, caregiverContext');
     
     ref.invalidate(caregiversNotifierProvider);
-    // ignore: avoid_print
-    print('[SyncProvider][H3-DEBUG] Invalidated: caregiversNotifierProvider');
+    dbg('[SyncProvider][H3-DEBUG] Invalidated: caregiversNotifierProvider');
     
     ref.invalidate(sleepEventsNotifierProvider);
-    // ignore: avoid_print
-    print('[SyncProvider][H3-DEBUG] Invalidated: sleepEventsNotifierProvider');
+    dbg('[SyncProvider][H3-DEBUG] Invalidated: sleepEventsNotifierProvider');
     
     ref.invalidate(sleepStateNotifierProvider);
-    // ignore: avoid_print
-    print('[SyncProvider][H3-DEBUG] Invalidated: sleepStateNotifierProvider');
+    dbg('[SyncProvider][H3-DEBUG] Invalidated: sleepStateNotifierProvider');
     
     ref.invalidate(caregiverContextProvider);
-    // ignore: avoid_print
-    print('[SyncProvider][H3-DEBUG] Invalidated: caregiverContextProvider');
+    dbg('[SyncProvider][H3-DEBUG] Invalidated: caregiverContextProvider');
     
-    // ignore: avoid_print
-    print('[SyncProvider][H3-DEBUG] ===== INVALIDATION COMPLETE =====');
+    dbg('[SyncProvider][H3-DEBUG] ===== INVALIDATION COMPLETE =====');
   }
 
   // ========== PULL CAREGIVERS ONLY ==========

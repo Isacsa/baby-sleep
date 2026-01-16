@@ -735,6 +735,166 @@ class LayeredSyncOrchestrator {
     // Default to transient for unknown errors (safer - will retry)
     return SyncErrorType.transient;
   }
+
+  // ========== LAYER 4: EVENT UPDATES (POST-NORMALIZATION) ==========
+  // 
+  // After normalization, some events may have is_corrected=true and need
+  // to be pushed to the remote. This layer processes UPDATE actions from
+  // the sync queue.
+
+  /// Pushes event updates from the sync queue
+  /// 
+  /// Processes entries with action=update, calling updateSleepEvent for each
+  /// Dequeues after successful push
+  Future<Result<_PushLayerResult, Failure>> pushEventUpdates() async {
+    final queueResult = await _eventLocalDataSource.getPendingSyncEntries(SyncAction.update);
+    if (queueResult.isError) {
+      return Error(queueResult.failureOrNull!);
+    }
+
+    final pendingUpdates = queueResult.dataOrNull ?? [];
+    if (pendingUpdates.isEmpty) {
+      return const Success(_PushLayerResult());
+    }
+
+    // ignore: avoid_print
+    print('[LayeredSync] Processing ${pendingUpdates.length} pending event updates');
+
+    var successCount = 0;
+    var errorCount = 0;
+    var hasTransientError = false;
+
+    for (final entry in pendingUpdates) {
+      // Get the event from local storage
+      final eventResult = await _eventLocalDataSource.getEventById(entry.eventId);
+      if (eventResult.isError) {
+        errorCount++;
+        // ignore: avoid_print
+        print('[LayeredSync] Failed to get event ${entry.eventId} for update: ${eventResult.failureOrNull?.message}');
+        continue;
+      }
+
+      final event = eventResult.dataOrNull;
+      if (event == null) {
+        // Event not found - dequeue anyway (stale entry)
+        await _eventLocalDataSource.dequeueAfterSync(entry.eventId);
+        // ignore: avoid_print
+        print('[LayeredSync] Event ${entry.eventId} not found - dequeued stale entry');
+        continue;
+      }
+
+      // Push update to remote
+      final pushResult = await _eventRemoteDataSource.updateSleepEvent(event);
+
+      if (pushResult.isSuccess) {
+        // Dequeue after success
+        await _eventLocalDataSource.dequeueAfterSync(entry.eventId);
+        
+        // Update local synced_at from response
+        final updatedEvent = pushResult.dataOrNull!;
+        if (updatedEvent.syncedAt != null) {
+          await _eventLocalDataSource.markEventSynced(
+            entry.eventId, 
+            DateTime.parse(updatedEvent.syncedAt!),
+          );
+        }
+        
+        successCount++;
+        // ignore: avoid_print
+        print('[LayeredSync] Pushed event update: ${entry.eventId}');
+      } else {
+        final failure = pushResult.failureOrNull!;
+        final errorType = _classifyFailure(failure);
+        
+        if (errorType == SyncErrorType.transient) {
+          hasTransientError = true;
+          break;
+        }
+        
+        // Permanent error - dequeue to avoid infinite retry
+        await _eventLocalDataSource.dequeueAfterSync(entry.eventId);
+        errorCount++;
+        // ignore: avoid_print
+        print('[LayeredSync] Failed to push event update ${entry.eventId}: ${failure.message}');
+      }
+    }
+
+    return Success(_PushLayerResult(
+      successCount: successCount,
+      errorCount: errorCount,
+      hasTransientError: hasTransientError,
+    ));
+  }
+
+  /// Pushes pending event updates for a specific baby
+  /// 
+  /// Filters queue entries to only process events for the given baby
+  Future<Result<_PushLayerResult, Failure>> pushEventUpdatesForBaby(String babyId) async {
+    final queueResult = await _eventLocalDataSource.getPendingSyncEntries(SyncAction.update);
+    if (queueResult.isError) {
+      return Error(queueResult.failureOrNull!);
+    }
+
+    final allPendingUpdates = queueResult.dataOrNull ?? [];
+    if (allPendingUpdates.isEmpty) {
+      return const Success(_PushLayerResult());
+    }
+
+    var successCount = 0;
+    var errorCount = 0;
+    var hasTransientError = false;
+
+    for (final entry in allPendingUpdates) {
+      // Get the event to check baby_id
+      final eventResult = await _eventLocalDataSource.getEventById(entry.eventId);
+      if (eventResult.isError) {
+        continue; // Skip on error
+      }
+
+      final event = eventResult.dataOrNull;
+      if (event == null || event.babyId != babyId) {
+        continue; // Not for this baby
+      }
+
+      // Push update to remote
+      final pushResult = await _eventRemoteDataSource.updateSleepEvent(event);
+
+      if (pushResult.isSuccess) {
+        await _eventLocalDataSource.dequeueAfterSync(entry.eventId);
+        
+        final updatedEvent = pushResult.dataOrNull!;
+        if (updatedEvent.syncedAt != null) {
+          await _eventLocalDataSource.markEventSynced(
+            entry.eventId, 
+            DateTime.parse(updatedEvent.syncedAt!),
+          );
+        }
+        
+        successCount++;
+        // ignore: avoid_print
+        print('[LayeredSync] Pushed event update: ${entry.eventId}');
+      } else {
+        final failure = pushResult.failureOrNull!;
+        final errorType = _classifyFailure(failure);
+        
+        if (errorType == SyncErrorType.transient) {
+          hasTransientError = true;
+          break;
+        }
+        
+        await _eventLocalDataSource.dequeueAfterSync(entry.eventId);
+        errorCount++;
+        // ignore: avoid_print
+        print('[LayeredSync] Failed to push event update ${entry.eventId}: ${failure.message}');
+      }
+    }
+
+    return Success(_PushLayerResult(
+      successCount: successCount,
+      errorCount: errorCount,
+      hasTransientError: hasTransientError,
+    ));
+  }
 }
 
 /// Result of pushing a single layer

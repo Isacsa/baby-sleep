@@ -6,44 +6,40 @@ import 'package:temp_flutter/data/datasources/remote/sleep_event_remote_datasour
 /// Result of a pull operation
 class PullResult {
   final int eventsReceived;
-  final DateTime? newLastSyncedAt;
+  final SyncCursor? newCursor;
   final bool hasError;
 
   const PullResult({
     required this.eventsReceived,
-    this.newLastSyncedAt,
+    this.newCursor,
     this.hasError = false,
   });
 
   PullResult.withError()
       : eventsReceived = 0,
-        newLastSyncedAt = null,
+        newCursor = null,
         hasError = true;
+
+  /// Legacy accessor for backwards compatibility
+  DateTime? get newLastSyncedAt => newCursor?.syncedAt;
 }
 
 /// Pull strategy implementation
 /// 
 /// Handles receiving remote events from Supabase backend
-/// Processes events in batches with proper error handling
-/// Idempotent - safe to re-run
+/// Uses composite cursor (synced_at, id) with server-generated synced_at
 /// 
-/// CLOCK SKEW ROBUSTNESS:
-/// Uses clamp + buffer strategy to handle devices with different clock times:
-/// 1. Clamp lastSyncedAt to max(now) to prevent "future cursor" issues
-/// 2. Apply safety buffer (5 min) to re-fetch recent events
-/// 3. Upsert is idempotent - duplicates are safe
-/// 4. Update cursor to min(maxCreatedAt, now) to prevent future jumps
+/// KEY DESIGN DECISIONS:
+/// 1. synced_at is server-generated (via trigger) - eliminates clock-skew issues
+/// 2. Composite cursor (synced_at, id) ensures deterministic ordering
+/// 3. Pagination loops until no more events (not just one batch)
+/// 4. Upsert is idempotent - duplicates are safe
 class PullStrategyImpl {
   final SleepEventLocalDataSource _localDataSource;
   final SleepEventRemoteDataSource _remoteDataSource;
   
-  /// Maximum events per batch
-  static const int _batchSize = 50;
-  
-  /// Safety buffer for clock skew tolerance
-  /// Re-fetch events from this many minutes before lastSyncedAt
-  /// This ensures we don't miss events due to clock differences between devices
-  static const Duration _clockSkewBuffer = Duration(minutes: 5);
+  /// Maximum events per batch/page
+  static const int _pageSize = 200;
 
   PullStrategyImpl({
     required SleepEventLocalDataSource localDataSource,
@@ -51,152 +47,115 @@ class PullStrategyImpl {
   })  : _localDataSource = localDataSource,
         _remoteDataSource = remoteDataSource;
 
-  /// Pulls new remote events for a specific baby
+  /// Pulls new remote events for a specific baby using composite cursor
   /// 
   /// [babyId] - Baby ID to pull events for
   /// 
-  /// Returns number of events received and new lastSyncedAt
+  /// Returns number of events received and new cursor
+  /// Paginates until all events are fetched
   /// Stops on transient errors (network)
-  /// Continues on permanent errors (marks them)
   Future<Result<PullResult, Failure>> pullEventsForBaby(String babyId) async {
-    final nowUtc = DateTime.now().toUtc();
+    void dbg(String msg) {
+      assert(() {
+        // ignore: avoid_print
+        print(msg);
+        return true;
+      }());
+    }
     
-    // Get last synced timestamp
-    final lastSyncedResult = await _localDataSource.getLastSyncedAt(babyId);
+    // Get current cursor
+    final cursorResult = await _localDataSource.getSyncCursor(babyId);
     
-    if (lastSyncedResult.isError) {
-      return Error(lastSyncedResult.failureOrNull!);
+    if (cursorResult.isError) {
+      return Error(cursorResult.failureOrNull!);
     }
 
-    // Use epoch if never synced
-    final rawLastSyncedAt = lastSyncedResult.dataOrNull ?? 
-        DateTime.fromMillisecondsSinceEpoch(0).toUtc();
+    var cursor = cursorResult.dataOrNull ?? SyncCursor.initial();
     
     // === DEBUG LOG H1: Pull cursor info ===
-    // ignore: avoid_print
-    print('[PullStrategy][H1-DEBUG] ===== PULL START =====');
-    // ignore: avoid_print
-    print('[PullStrategy][H1-DEBUG] babyId: $babyId');
-    // ignore: avoid_print
-    print('[PullStrategy][H1-DEBUG] nowUtc: ${nowUtc.toIso8601String()}');
-    // ignore: avoid_print
-    print('[PullStrategy][H1-DEBUG] rawLastSyncedAt: ${rawLastSyncedAt.toIso8601String()}');
-    
-    // === CLOCK SKEW ROBUSTNESS ===
-    // Step 1: Clamp lastSyncedAt to max(now) - prevent "future cursor" issues
-    final isFutureCursor = rawLastSyncedAt.isAfter(nowUtc);
-    final clampedLastSyncedAt = isFutureCursor ? nowUtc : rawLastSyncedAt;
-    
-    if (isFutureCursor) {
-      // ignore: avoid_print
-      print('[PullStrategy][H1-DEBUG] WARNING: lastSyncedAt was in FUTURE! Clamped to now.');
-    }
-    
-    // Step 2: Apply safety buffer - re-fetch recent events to handle clock skew
-    // This is safe because upsert is idempotent
-    final lastSyncedAt = clampedLastSyncedAt.subtract(_clockSkewBuffer);
-    
-    // ignore: avoid_print
-    print('[PullStrategy][H1-DEBUG] effectiveCursor (with ${_clockSkewBuffer.inMinutes}min buffer): ${lastSyncedAt.toIso8601String()}');
+    dbg('[PullStrategy][H1-DEBUG] ===== PULL START (composite cursor) =====');
+    dbg('[PullStrategy][H1-DEBUG] babyId: $babyId');
+    dbg('[PullStrategy][H1-DEBUG] cursor: $cursor');
 
-    // Fetch new events from remote
-    final remoteResult = await _remoteDataSource.getNewRemoteEvents(
-      babyId: babyId,
-      lastSyncedAt: lastSyncedAt,
-      limit: _batchSize,
-    );
+    int totalEventsReceived = 0;
+    int pageCount = 0;
 
-    if (remoteResult.isError) {
-      // ignore: avoid_print
-      print('[PullStrategy][H1-DEBUG] Remote fetch FAILED: ${remoteResult.failureOrNull?.message}');
-      return Error(remoteResult.failureOrNull!);
-    }
-
-    final remoteEvents = remoteResult.dataOrNull ?? [];
-    
-    // === DEBUG LOG H1: Events received ===
-    // ignore: avoid_print
-    print('[PullStrategy][H1-DEBUG] eventsReceived: ${remoteEvents.length}');
-    
-    if (remoteEvents.isNotEmpty) {
-      // Log first and last few events for debugging
-      final eventsSorted = List.of(remoteEvents)
-        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+    // Paginate until no more events
+    while (true) {
+      pageCount++;
       
-      final firstEvent = eventsSorted.first;
-      final lastEvent = eventsSorted.last;
-      // ignore: avoid_print
-      print('[PullStrategy][H1-DEBUG] min(created_at): ${firstEvent.createdAt}');
-      // ignore: avoid_print
-      print('[PullStrategy][H1-DEBUG] max(created_at): ${lastEvent.createdAt}');
-      // ignore: avoid_print
-      print('[PullStrategy][H1-DEBUG] First 3 events:');
-      for (var i = 0; i < 3 && i < eventsSorted.length; i++) {
-        final e = eventsSorted[i];
-        // ignore: avoid_print
-        print('  [${e.id.substring(0, 8)}] ${e.type} ts=${e.timestamp} created=${e.createdAt}');
+      dbg('[PullStrategy][H1-DEBUG] Page $pageCount: cursorSyncedAt=${cursor.syncedAt}, cursorId=${cursor.eventId}');
+
+      // Fetch page of events from remote using composite cursor
+      final remoteResult = await _remoteDataSource.getNewRemoteEventsByCursor(
+        babyId: babyId,
+        cursorSyncedAt: cursor.syncedAt,
+        cursorId: cursor.eventId,
+        limit: _pageSize,
+      );
+
+      if (remoteResult.isError) {
+        dbg('[PullStrategy][H1-DEBUG] Remote fetch FAILED: ${remoteResult.failureOrNull?.message}');
+        return Error(remoteResult.failureOrNull!);
       }
-    }
-    
-    if (remoteEvents.isEmpty) {
-      // No new events - update lastSyncedAt to now to avoid re-fetching
-      final now = DateTime.now().toUtc();
-      await _localDataSource.setLastSyncedAt(babyId, now);
-      // ignore: avoid_print
-      print('[PullStrategy][H1-DEBUG] No new events, updated cursor to now: ${now.toIso8601String()}');
-      // ignore: avoid_print
-      print('[PullStrategy][H1-DEBUG] ===== PULL END =====');
-      return Success(PullResult(
-        eventsReceived: 0,
-        newLastSyncedAt: now,
-      ));
-    }
 
-    // Upsert events into local storage (idempotent)
-    final upsertResult = await _localDataSource.upsertRemoteEvents(remoteEvents);
-    
-    if (upsertResult.isError) {
-      // ignore: avoid_print
-      print('[PullStrategy][H1-DEBUG] Upsert FAILED: ${upsertResult.failureOrNull?.message}');
-      return Error(upsertResult.failureOrNull!);
-    }
+      final remoteEvents = remoteResult.dataOrNull ?? [];
+      
+      dbg('[PullStrategy][H1-DEBUG] Page $pageCount: received ${remoteEvents.length} events');
+      
+      if (remoteEvents.isEmpty) {
+        // No more events to fetch
+        break;
+      }
 
-    // ignore: avoid_print
-    print('[PullStrategy] pullEventsForBaby: babyId=$babyId, eventsFetched=${remoteEvents.length}');
+      // Log first and last events for debugging
+      if (remoteEvents.isNotEmpty) {
+        final firstEvent = remoteEvents.first;
+        final lastEvent = remoteEvents.last;
+        dbg('[PullStrategy][H1-DEBUG] firstKey: synced_at=${firstEvent.syncedAt}, id=${firstEvent.id.substring(0, 8)}');
+        dbg('[PullStrategy][H1-DEBUG] lastKey: synced_at=${lastEvent.syncedAt}, id=${lastEvent.id.substring(0, 8)}');
+      }
 
-    // Find the latest created_at from received events
-    DateTime? latestCreatedAt;
-    for (final event in remoteEvents) {
-      final createdAt = DateTime.parse(event.createdAt).toUtc();
-      if (latestCreatedAt == null || createdAt.isAfter(latestCreatedAt)) {
-        latestCreatedAt = createdAt;
+      // Upsert events into local storage (idempotent)
+      final upsertResult = await _localDataSource.upsertRemoteEvents(remoteEvents);
+      
+      if (upsertResult.isError) {
+        dbg('[PullStrategy][H1-DEBUG] Upsert FAILED: ${upsertResult.failureOrNull?.message}');
+        return Error(upsertResult.failureOrNull!);
+      }
+
+      totalEventsReceived += remoteEvents.length;
+
+      // Update cursor to last event's (synced_at, id)
+      // Events are ordered by synced_at ASC, id ASC, so last event has the highest cursor
+      final lastEvent = remoteEvents.last;
+      cursor = SyncCursor(
+        syncedAt: lastEvent.syncedAt != null 
+            ? DateTime.parse(lastEvent.syncedAt!).toUtc() 
+            : null,
+        eventId: lastEvent.id,
+      );
+
+      // Persist cursor after each page (resume-safe)
+      final setCursorResult = await _localDataSource.setSyncCursor(babyId, cursor);
+      if (setCursorResult.isError) {
+        dbg('[PullStrategy][H1-DEBUG] Set cursor FAILED: ${setCursorResult.failureOrNull?.message}');
+        // Continue anyway - we've upserted the events
+      }
+
+      // If we got less than a full page, we've reached the end
+      if (remoteEvents.length < _pageSize) {
+        break;
       }
     }
 
-    // === CLOCK SKEW ROBUSTNESS ===
-    // Step 3: Update lastSyncedAt to min(maxCreatedAt, now) to prevent future jumps
-    // This ensures that even if an event has a future created_at (from a device with wrong clock),
-    // we don't set our cursor to the future and miss events from other devices
-    if (latestCreatedAt != null) {
-      final currentNow = DateTime.now().toUtc();
-      final safeCursor = latestCreatedAt.isAfter(currentNow) ? currentNow : latestCreatedAt;
-      
-      if (latestCreatedAt.isAfter(currentNow)) {
-        // ignore: avoid_print
-        print('[PullStrategy][H1-DEBUG] WARNING: max(created_at) is in FUTURE! Clamping cursor to now.');
-      }
-      
-      await _localDataSource.setLastSyncedAt(babyId, safeCursor);
-      // ignore: avoid_print
-      print('[PullStrategy][H1-DEBUG] Updated cursor to: ${safeCursor.toIso8601String()}');
-    }
-    
-    // ignore: avoid_print
-    print('[PullStrategy][H1-DEBUG] ===== PULL END =====');
+    dbg('[PullStrategy][H1-DEBUG] Pull complete: $totalEventsReceived events in $pageCount pages');
+    dbg('[PullStrategy][H1-DEBUG] Final cursor: $cursor');
+    dbg('[PullStrategy][H1-DEBUG] ===== PULL END =====');
 
     return Success(PullResult(
-      eventsReceived: remoteEvents.length,
-      newLastSyncedAt: latestCreatedAt,
+      eventsReceived: totalEventsReceived,
+      newCursor: cursor,
     ));
   }
 
@@ -205,7 +164,7 @@ class PullStrategyImpl {
   /// Requires list of baby IDs (from local storage or repository)
   Future<Result<PullResult, Failure>> pullEventsForBabies(List<String> babyIds) async {
     int totalEvents = 0;
-    DateTime? latestSyncedAt;
+    SyncCursor? latestCursor;
 
     for (final babyId in babyIds) {
       final result = await pullEventsForBaby(babyId);
@@ -218,19 +177,19 @@ class PullStrategyImpl {
       final pullResult = result.dataOrNull!;
       totalEvents += pullResult.eventsReceived;
       
-      // Track the latest synced timestamp across all babies
-      if (pullResult.newLastSyncedAt != null) {
-        if (latestSyncedAt == null || 
-            pullResult.newLastSyncedAt!.isAfter(latestSyncedAt)) {
-          latestSyncedAt = pullResult.newLastSyncedAt;
+      // Track the latest cursor across all babies (for logging/debugging)
+      if (pullResult.newCursor != null && pullResult.newCursor!.syncedAt != null) {
+        if (latestCursor == null || 
+            latestCursor.syncedAt == null ||
+            pullResult.newCursor!.syncedAt!.isAfter(latestCursor.syncedAt!)) {
+          latestCursor = pullResult.newCursor;
         }
       }
     }
 
     return Success(PullResult(
       eventsReceived: totalEvents,
-      newLastSyncedAt: latestSyncedAt,
+      newCursor: latestCursor,
     ));
   }
 }
-

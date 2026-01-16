@@ -97,8 +97,9 @@ void main() {
       expect(sessions.first.startEvent.id, 'start-b'); // Winner (latest createdAt)
     });
 
-    test('should create 2 separate sessions when SleepStarts have timestamp diff > 5 minutes', () {
-      // Scenario: Two SleepStarts 6 minutes apart (not duplicates - beyond 5min window)
+    test('should NOT create phantom sessions when a SleepStart happens while another is still open (even minutes apart)', () {
+      // Scenario: Two SleepStarts without an intervening SleepEnd.
+      // This must never create a phantom incomplete session for the first start.
       
       final events = [
         createEvent(
@@ -110,19 +111,49 @@ void main() {
         createEvent(
           id: 'start-b',
           type: SleepEventType.sleepStart,
-          timestamp: baseTime.add(const Duration(minutes: 6)), // 6 min later = different session (beyond 5min window)
+          timestamp: baseTime.add(const Duration(minutes: 6)), // 6 min later (still conflict, no end)
           createdAt: baseTime.add(const Duration(minutes: 6, seconds: 1)),
         ),
       ];
 
       final sessions = SleepSession.fromEventList(events);
 
-      // Should have 2 incomplete sessions (both are valid, not duplicates)
+      // Should have exactly 1 incomplete session (winner is the most recent start)
+      expect(sessions.length, 1);
+      expect(sessions.first.isComplete, false);
+      expect(sessions.first.startEvent.id, 'start-b');
+    });
+
+    test('should create 2 sessions when there is a SleepEnd between starts (normal flow)', () {
+      final events = [
+        createEvent(
+          id: 'start-1',
+          type: SleepEventType.sleepStart,
+          timestamp: baseTime,
+          createdAt: baseTime.add(const Duration(seconds: 1)),
+        ),
+        createEvent(
+          id: 'end-1',
+          type: SleepEventType.sleepEnd,
+          timestamp: baseTime.add(const Duration(minutes: 10)),
+          createdAt: baseTime.add(const Duration(minutes: 10, seconds: 1)),
+        ),
+        createEvent(
+          id: 'start-2',
+          type: SleepEventType.sleepStart,
+          timestamp: baseTime.add(const Duration(minutes: 20)),
+          createdAt: baseTime.add(const Duration(minutes: 20, seconds: 1)),
+        ),
+      ];
+
+      final sessions = SleepSession.fromEventList(events);
+
       expect(sessions.length, 2);
-      expect(sessions[0].isComplete, false);
+      expect(sessions[0].isComplete, true);
       expect(sessions[1].isComplete, false);
-      expect(sessions[0].startEvent.id, 'start-a');
-      expect(sessions[1].startEvent.id, 'start-b');
+      expect(sessions[0].startEvent.id, 'start-1');
+      expect(sessions[0].endEvent!.id, 'end-1');
+      expect(sessions[1].startEvent.id, 'start-2');
     });
 
     test('should ignore corrected events', () {
