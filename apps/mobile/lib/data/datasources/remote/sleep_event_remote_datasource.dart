@@ -22,27 +22,13 @@ abstract class SleepEventRemoteDataSource {
   /// Returns events where syncedAt IS NULL
   Future<Result<List<SleepEventModel>, Failure>> getUnsyncedEvents(String babyId);
 
-  /// Gets new remote events (GetNewRemoteEvents) - LEGACY
+  /// Gets new remote events (GetNewRemoteEvents)
   /// 
-  /// Returns events where created_at > lastSyncedAt
-  /// @deprecated Use getNewRemoteEventsByCursor for reliable incremental sync
+  /// Returns events where syncedAt > lastSyncedAt
   Future<Result<List<SleepEventModel>, Failure>> getNewRemoteEvents({
     required String babyId,
     required DateTime lastSyncedAt,
     int? limit,
-  });
-
-  /// Gets new remote events using composite cursor (synced_at, id)
-  /// 
-  /// Uses server-generated synced_at for reliable incremental pull:
-  /// - Filters: (synced_at > cursorSyncedAt) OR (synced_at = cursorSyncedAt AND id > cursorId)
-  /// - Orders: synced_at ASC, id ASC
-  /// - Eliminates clock-skew issues since synced_at is server-generated
-  Future<Result<List<SleepEventModel>, Failure>> getNewRemoteEventsByCursor({
-    required String babyId,
-    DateTime? cursorSyncedAt,
-    String? cursorId,
-    int limit = 200,
   });
 
   /// Creates sleep event (CreateSleepStart/CreateSleepEnd)
