@@ -6,7 +6,7 @@ part of 'sync_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$syncHash() => r'b94e975927bd802a99b7a744975f48f94bdaebea';
+String _$syncHash() => r'c410079bca22f516f097434439b79731affb8aac';
 
 /// Sync provider
 ///
@@ -35,5 +35,25 @@ final syncProvider = AutoDisposeNotifierProvider<Sync, SyncState>.internal(
 );
 
 typedef _$Sync = AutoDisposeNotifier<SyncState>;
+String _$pendingSyncCountHash() => r'fe2bd7fa25672510d1729c1b2b6c950138f7a299';
+
+/// Provider for pending sync count for active baby
+///
+/// FIX P5: Used to show badge on sync icon in UI
+///
+/// Copied from [PendingSyncCount].
+@ProviderFor(PendingSyncCount)
+final pendingSyncCountProvider =
+    AutoDisposeAsyncNotifierProvider<PendingSyncCount, int>.internal(
+      PendingSyncCount.new,
+      name: r'pendingSyncCountProvider',
+      debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+          ? null
+          : _$pendingSyncCountHash,
+      dependencies: null,
+      allTransitiveDependencies: null,
+    );
+
+typedef _$PendingSyncCount = AutoDisposeAsyncNotifier<int>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

@@ -5,14 +5,18 @@ import 'package:temp_flutter/sync/sync_state.dart';
 /// 
 /// Shows icon + label for IDLE/SYNCING/SUCCESS/ERROR
 /// Optional error message on tap (via tooltip)
+/// Optional pending count badge for unsynced events (FIX P5)
 class SyncStatusChip extends StatelessWidget {
   final SyncState syncState;
   final VoidCallback? onTap;
+  /// Number of events pending sync (0 = no badge)
+  final int pendingCount;
 
   const SyncStatusChip({
     super.key,
     required this.syncState,
     this.onTap,
+    this.pendingCount = 0,
   });
 
   @override
@@ -42,6 +46,31 @@ class SyncStatusChip extends StatelessWidget {
       ),
     };
 
+    // Build the icon widget with optional pending badge
+    Widget iconWidget;
+    if (syncState.status == SyncStatus.syncing) {
+      iconWidget = SizedBox(
+        width: 16,
+        height: 16,
+        child: CircularProgressIndicator(
+          strokeWidth: 2,
+          valueColor: AlwaysStoppedAnimation(color),
+        ),
+      );
+    } else if (pendingCount > 0) {
+      // Show pending badge on icon
+      iconWidget = Badge(
+        label: Text(
+          pendingCount > 99 ? '99+' : pendingCount.toString(),
+          style: const TextStyle(fontSize: 10),
+        ),
+        backgroundColor: theme.colorScheme.error,
+        child: Icon(Icons.cloud_upload_outlined, size: 16, color: color),
+      );
+    } else {
+      iconWidget = Icon(icon, size: 16, color: color);
+    }
+    
     final chip = Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -52,19 +81,10 @@ class SyncStatusChip extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          syncState.status == SyncStatus.syncing
-              ? SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation(color),
-                  ),
-                )
-              : Icon(icon, size: 16, color: color),
+          iconWidget,
           const SizedBox(width: 6),
           Text(
-            label,
+            pendingCount > 0 ? '$pendingCount pending' : label,
             style: theme.textTheme.labelMedium?.copyWith(color: color),
           ),
         ],

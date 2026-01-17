@@ -389,11 +389,30 @@ class SleepEventLocalDataSourceImpl implements SleepEventLocalDataSource {
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
         } else {
-          // Update only mutable fields
-          // Create update map with only mutable fields
+          // Update only mutable fields, but NEVER undo local corrections
+          // Rule: is_corrected can go false→true but NOT true→false
+          // This prevents sync from undoing local corrections before they're pushed
+          final localIsCorrected = existing.first['is_corrected'] == 1;
+          final remoteIsCorrected = event.isCorrected;
+          
+          // Only update is_corrected if remote is true OR local is false
+          // If local is already true, keep it true (don't revert correction)
+          final effectiveIsCorrected = localIsCorrected || remoteIsCorrected;
+          
+          // Same for corrected_by: keep local value if local was corrected
+          final localCorrectedBy = existing.first['corrected_by'] as String?;
+          final effectiveCorrectedBy = localIsCorrected 
+              ? localCorrectedBy 
+              : event.correctedBy;
+          
+          // #region agent log FIX1
+          // ignore: avoid_print
+          print('[DEBUG-FIX1] upsertRemoteEvents: id=${event.id.substring(0, 8)}, localIsCorrected=$localIsCorrected, remoteIsCorrected=$remoteIsCorrected, effective=$effectiveIsCorrected');
+          // #endregion
+          
           final updateMap = {
-            'is_corrected': event.isCorrected ? 1 : 0,
-            'corrected_by': event.correctedBy,
+            'is_corrected': effectiveIsCorrected ? 1 : 0,
+            'corrected_by': effectiveCorrectedBy,
             'synced_at': event.syncedAt,
             'metadata': event.metadata != null ? jsonEncode(event.metadata) : null,
           };

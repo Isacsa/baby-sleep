@@ -6,7 +6,7 @@ import 'package:temp_flutter/application/providers/sleep_state_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/application/providers/sync_provider.dart';
 import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
-import 'package:temp_flutter/core/utils/device_id_manager.dart';
+// DeviceIdManager import removed - no longer needed for manual conflict resolution
 import 'package:temp_flutter/domain/entities/baby.dart';
 import 'package:temp_flutter/domain/entities/sleep_event.dart';
 import 'package:temp_flutter/domain/value_objects/sleep_session.dart';
@@ -97,15 +97,24 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     await ref.read(caregiverContextProvider.notifier).ensureContext();
   }
 
-  /// Checks for duplicate SleepStart conflicts (multi-device) and shows resolution modal
+  /// Checks for duplicate SleepStart conflicts (multi-device) and resolves automatically
+  /// Uses last-write-wins (most recent createdAt) and shows informative snackbar
   void _checkForDuplicateConflicts() {
     if (!mounted) return;
     
+    // #region agent log H5 - UI conflict check
+    debugPrint('[DEBUG-H5] _checkForDuplicateConflicts CALLED');
+    // #endregion
+    
     final conflicts = ref.read(sleepEventsNotifierProvider.notifier).detectDuplicateStartConflicts();
+    
+    // #region agent log H5 - Conflicts result
+    debugPrint('[DEBUG-H5] conflicts found: ${conflicts.length}');
+    // #endregion
     
     if (conflicts.isEmpty) return;
     
-    // Only show conflicts we haven't handled yet
+    // Resolve conflicts automatically without modal
     for (final conflict in conflicts) {
       // Create a unique ID for this conflict based on event IDs
       final conflictId = conflict.events.map((e) => e.id).toList()..sort();
@@ -114,106 +123,63 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       if (!_handledConflictIds.contains(conflictKey)) {
         _handledConflictIds.add(conflictKey);
         
-        // Show snackbar + modal for this conflict
+        // Resolve automatically: keep the most recent (first in sorted list - already sorted by createdAt DESC)
+        final keepEvent = conflict.suggestedWinner;
+        
+        debugPrint('[DEBUG-FIX2] Auto-resolving conflict: keeping ${keepEvent.id.substring(0, 8)}, discarding ${conflict.events.where((e) => e.id != keepEvent.id).map((e) => e.id.substring(0, 8)).toList()}');
+        
+        // Resolve in background and show snackbar
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
-            _showDuplicateConflictSnackBar(conflict);
+            _autoResolveConflict(conflict, keepEvent);
           }
         });
         
-        // Only show one conflict at a time
+        // Handle one conflict at a time
         break;
       }
     }
   }
-
-  /// Shows snackbar alerting about duplicate conflict and opens modal
-  void _showDuplicateConflictSnackBar(DuplicateStartConflict conflict) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded, color: Colors.white),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Text(
-                'Detectámos registos duplicados em múltiplos dispositivos. Precisamos da tua confirmação.',
-                style: TextStyle(fontSize: 13),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close, color: Colors.white, size: 18),
-              onPressed: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-          ],
-        ),
-        backgroundColor: Colors.orange.shade800,
-        duration: const Duration(seconds: 10),
-        action: SnackBarAction(
-          label: 'Resolver',
-          textColor: Colors.white,
-          onPressed: () => _showDuplicateConflictModal(conflict),
-        ),
-      ),
-    );
-  }
-
-  /// Shows modal for user to choose which SleepStart to keep
-  Future<void> _showDuplicateConflictModal(DuplicateStartConflict conflict) async {
-    final currentDeviceId = await DeviceIdManager.getDeviceId();
-    
-    if (!mounted) return;
-    
-    final selectedEventId = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: NightTheme.surface,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => _DuplicateConflictSheet(
-        conflict: conflict,
-        currentDeviceId: currentDeviceId,
-      ),
-    );
-    
-    if (selectedEventId == null || !mounted) {
-      debugPrint('[HomeSleep] DuplicateConflict modal cancelled');
-      return;
-    }
-    
-    debugPrint('[HomeSleep] User chose to keep event: $selectedEventId');
-    
+  
+  /// Automatically resolves a conflict and shows informative snackbar
+  Future<void> _autoResolveConflict(DuplicateStartConflict conflict, SleepEvent keepEvent) async {
     try {
-      setState(() => _isActionLoading = true);
-      
       await ref.read(sleepEventsNotifierProvider.notifier).resolveDuplicateConflict(
-        keepEventId: selectedEventId,
+        keepEventId: keepEvent.id,
         conflictEvents: conflict.events,
       );
       
+      final timeStr = '${keepEvent.timestamp.toLocal().hour.toString().padLeft(2, '0')}:${keepEvent.timestamp.toLocal().minute.toString().padLeft(2, '0')}';
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Conflito resolvido com sucesso'),
-            backgroundColor: Colors.green,
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.auto_fix_high, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Conflito multi-device resolvido: mantido início às $timeStr',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.blue.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
           ),
         );
       }
     } catch (e) {
-      debugPrint('[HomeSleep] Error resolving conflict: $e');
-      if (mounted) {
-        _showErrorSnackBar('Erro ao resolver conflito: $e');
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isActionLoading = false);
-      }
+      debugPrint('[DEBUG-FIX2] Auto-resolve failed: $e');
+      // Don't show error - will retry on next check
     }
   }
+
+  // Note: _showDuplicateConflictSnackBar and _showDuplicateConflictModal removed
+  // Conflicts are now resolved automatically via _autoResolveConflict
 
   @override
   Widget build(BuildContext context) {
@@ -340,11 +306,15 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             ),
           ),
           
-          // Sync status
-          SyncStatusChip(
-            syncState: syncState,
-            onTap: () => _showSyncDetails(),
-          ),
+          // Sync status with pending count badge (FIX P5)
+          Builder(builder: (context) {
+            final pendingCount = ref.watch(pendingSyncCountProvider).valueOrNull ?? 0;
+            return SyncStatusChip(
+              syncState: syncState,
+              pendingCount: pendingCount,
+              onTap: () => _showSyncDetails(),
+            );
+          }),
           
           const SizedBox(width: 8),
           
@@ -907,6 +877,12 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     required List<SleepSession> overlappingSessions,
     required DateTime newStartTime,
   }) async {
+    // #region agent log H1 - UI overwrite entry
+    debugPrint('[DEBUG-H1] UI _overwriteSessionsAndCreateStart ENTRY');
+    debugPrint('[DEBUG-H1]   overlappingSessions: ${overlappingSessions.length}');
+    debugPrint('[DEBUG-H1]   newStartTime: $newStartTime');
+    // #endregion
+    
     setState(() => _isActionLoading = true);
     try {
       await ref.read(sleepEventsNotifierProvider.notifier).overwriteAndCreateStart(
@@ -914,6 +890,12 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
         newStartTime: newStartTime,
       );
       debugPrint('[HomeSleep] Overwrite and create start successful');
+      
+      // #region agent log H2 - Check state after overwrite
+      final sleepState = ref.read(sleepStateNotifierProvider);
+      debugPrint('[DEBUG-H2] After overwrite - isSleeping: ${sleepState.isSleeping}, lastEvent: ${sleepState.lastEvent?.type.name}');
+      // #endregion
+      
       if (mounted) {
         _showSuccessSnackBar('Sono substituído');
       }
@@ -921,7 +903,14 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       debugPrint('[HomeSleep] Overwrite error: $e');
       debugPrint('[HomeSleep] Stack: $stack');
       if (mounted) {
-        _showErrorSnackBar(e.toString());
+        // FIX P5: Add retry to overwrite errors
+        _showErrorSnackBar(
+          'Erro ao substituir: $e',
+          onRetry: () => _overwriteSessionsAndCreateStart(
+            overlappingSessions: overlappingSessions,
+            newStartTime: newStartTime,
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -951,7 +940,15 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       debugPrint('[HomeSleep] Overwrite session error: $e');
       debugPrint('[HomeSleep] Stack: $stack');
       if (mounted) {
-        _showErrorSnackBar(e.toString());
+        // FIX P5: Add retry to overwrite session errors
+        _showErrorSnackBar(
+          'Erro ao substituir: $e',
+          onRetry: () => _overwriteSessionsAndCreateSession(
+            overlappingSessions: overlappingSessions,
+            newStartTime: newStartTime,
+            newEndTime: newEndTime,
+          ),
+        );
       }
     } finally {
       if (mounted) {
@@ -1803,231 +1800,4 @@ enum _SleepingModalChoice {
   cancel,
 }
 
-/// Bottom sheet for resolving duplicate SleepStart conflicts (multi-device)
-class _DuplicateConflictSheet extends StatelessWidget {
-  final DuplicateStartConflict conflict;
-  final String currentDeviceId;
-
-  const _DuplicateConflictSheet({
-    required this.conflict,
-    required this.currentDeviceId,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Handle bar
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: NightTheme.textSecondary.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            
-            // Icon and title
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade900.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(
-                    Icons.devices,
-                    color: Colors.orange.shade300,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                const Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Conflito de dispositivos',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: NightTheme.textPrimary,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Foram registados inícios de sono em dispositivos diferentes. Escolhe qual manter:',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: NightTheme.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            
-            // List of conflicting events
-            ...conflict.events.asMap().entries.map((entry) {
-              final index = entry.key;
-              final event = entry.value;
-              final isThisDevice = event.deviceId == currentDeviceId;
-              final isSuggested = index == 0; // First is the suggested winner (most recent createdAt)
-              
-              return _buildEventOption(
-                context: context,
-                event: event,
-                isThisDevice: isThisDevice,
-                isSuggested: isSuggested,
-                onTap: () => Navigator.pop(context, event.id),
-              );
-            }),
-            
-            const SizedBox(height: 16),
-            
-            // Cancel button
-            TextButton(
-              onPressed: () => Navigator.pop(context, null),
-              child: Text(
-                'Cancelar (resolver depois)',
-                style: TextStyle(color: NightTheme.textSecondary),
-              ),
-            ),
-            
-            SizedBox(height: MediaQuery.of(context).padding.bottom),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEventOption({
-    required BuildContext context,
-    required SleepEvent event,
-    required bool isThisDevice,
-    required bool isSuggested,
-    required VoidCallback onTap,
-  }) {
-    final timeLocal = event.timestamp.toLocal();
-    final createdLocal = event.createdAt.toLocal();
-    
-    final timeStr = '${timeLocal.hour.toString().padLeft(2, '0')}:${timeLocal.minute.toString().padLeft(2, '0')}';
-    final createdStr = '${createdLocal.hour.toString().padLeft(2, '0')}:${createdLocal.minute.toString().padLeft(2, '0')}:${createdLocal.second.toString().padLeft(2, '0')}';
-    
-    final deviceLabel = isThisDevice ? 'Este dispositivo' : 'Outro dispositivo';
-    final deviceColor = isThisDevice ? NightTheme.primary : NightTheme.secondary;
-    
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: NightTheme.backgroundBase,
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isSuggested 
-                    ? NightTheme.primary.withValues(alpha: 0.5)
-                    : NightTheme.textSecondary.withValues(alpha: 0.2),
-                width: isSuggested ? 2 : 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  isThisDevice ? Icons.phone_iphone : Icons.devices_other,
-                  color: deviceColor,
-                  size: 24,
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            'Início: $timeStr',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                              color: NightTheme.textPrimary,
-                            ),
-                          ),
-                          if (isSuggested) ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: NightTheme.primary.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: const Text(
-                                'Sugerido',
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w600,
-                                  color: NightTheme.primary,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: deviceColor.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              deviceLabel,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: deviceColor,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Criado às $createdStr',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              color: NightTheme.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.chevron_right,
-                  color: NightTheme.textSecondary,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
+// Note: _DuplicateConflictSheet removed - conflicts are now resolved automatically

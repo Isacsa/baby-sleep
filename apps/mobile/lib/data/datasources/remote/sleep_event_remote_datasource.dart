@@ -36,6 +36,13 @@ abstract class SleepEventRemoteDataSource {
   /// ID must be generated locally before calling
   Future<Result<SleepEventModel, Failure>> createSleepEvent(SleepEventModel event);
 
+  /// Upserts a sleep event for sync:
+  /// - Tries INSERT first (idempotent)
+  /// - If the row already exists remotely, performs UPDATE of mutable fields
+  ///
+  /// This is required to propagate corrections (`is_corrected`, `corrected_by`) across devices.
+  Future<Result<SleepEventModel, Failure>> upsertSleepEventForSync(SleepEventModel event);
+
   /// Updates sleep event (MarkEventAsCorrected)
   /// 
   /// Only mutable fields can be updated

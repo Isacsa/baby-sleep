@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:temp_flutter/core/types/result.dart' as core;
 import 'package:temp_flutter/sync/sync_state.dart';
@@ -9,6 +10,7 @@ import 'package:temp_flutter/data/datasources/local/caregiver_local_datasource_i
 import 'package:temp_flutter/data/datasources/remote/sleep_event_remote_datasource_impl.dart';
 import 'package:temp_flutter/data/datasources/remote/baby_remote_datasource_impl.dart';
 import 'package:temp_flutter/data/datasources/remote/caregiver_remote_datasource_impl.dart';
+import 'package:temp_flutter/application/providers/active_baby_provider.dart';
 import 'package:temp_flutter/application/providers/babies_provider.dart';
 import 'package:temp_flutter/application/providers/caregivers_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
@@ -34,10 +36,98 @@ part 'sync_provider.g.dart';
 class Sync extends _$Sync {
   LayeredSyncOrchestrator? _layeredSyncOrchestrator;
   SyncPullEngine? _pullEngine;
+  
+  // FIX P4: Auto-sync after local changes
+  Timer? _autoSyncTimer;
+  bool _autoSyncInProgress = false;
 
   @override
   SyncState build() {
+    // Cancel timer on dispose
+    ref.onDispose(() {
+      _autoSyncTimer?.cancel();
+    });
     return SyncState.initial();
+  }
+  
+  // ========== AUTO-SYNC (FIX P4) ==========
+  
+  /// Schedules an automatic sync after a local change (debounced, non-blocking)
+  /// 
+  /// Called automatically after addEvent() to propagate changes to other devices.
+  /// Uses a 2-second debounce to batch multiple rapid changes into one sync.
+  /// Does NOT block UI or change state to "syncing" (runs silently in background).
+  void scheduleSyncAfterLocalChange(String babyId) {
+    // Cancel any pending auto-sync
+    _autoSyncTimer?.cancel();
+    
+    // Schedule new sync with 2-second debounce
+    _autoSyncTimer = Timer(const Duration(seconds: 2), () {
+      _syncInBackground(babyId);
+    });
+    
+    // ignore: avoid_print
+    print('[SyncProvider] Auto-sync scheduled for babyId=$babyId (2s debounce)');
+  }
+  
+  /// Performs sync in background without changing UI state
+  /// 
+  /// Does not set state to "syncing" to avoid UI spinner disruption.
+  /// Errors are logged but not surfaced (will retry on next action).
+  Future<void> _syncInBackground(String babyId) async {
+    if (_autoSyncInProgress) {
+      // ignore: avoid_print
+      print('[SyncProvider] Auto-sync skipped: already in progress');
+      return;
+    }
+    
+    _autoSyncInProgress = true;
+    // ignore: avoid_print
+    print('[SyncProvider] Auto-sync START: babyId=$babyId');
+    
+    try {
+      // Push local changes
+      final pushResult = await _orchestrator.syncForBaby(babyId);
+      
+      if (pushResult.isError) {
+        // ignore: avoid_print
+        print('[SyncProvider] Auto-sync push FAILED: ${pushResult.failureOrNull?.message}');
+        return;
+      }
+      
+      final pushData = pushResult.dataOrNull!;
+      if (pushData.hasTransientError) {
+        // ignore: avoid_print
+        print('[SyncProvider] Auto-sync push FAILED (network): ${pushData.errorMessage}');
+        return;
+      }
+      
+      // ignore: avoid_print
+      print('[SyncProvider] Auto-sync pushed: '
+          '${pushData.babiesPushed} babies, '
+          '${pushData.caregiversPushed} caregivers, '
+          '${pushData.eventsPushed} events');
+      
+      // Pull remote updates
+      final pullResult = await _pull.pullForBaby(babyId);
+      
+      if (pullResult.isError) {
+        // ignore: avoid_print
+        print('[SyncProvider] Auto-sync pull FAILED: ${pullResult.failureOrNull?.message}');
+        return;
+      }
+      
+      // Invalidate caches to refresh UI with new data
+      _invalidateAfterSync();
+      
+      // ignore: avoid_print
+      print('[SyncProvider] Auto-sync COMPLETE: babyId=$babyId');
+    } catch (e) {
+      // ignore: avoid_print
+      print('[SyncProvider] Auto-sync ERROR: $e');
+    } finally {
+      _autoSyncInProgress = false;
+    }
   }
 
   /// Gets or creates the layered sync orchestrator
@@ -581,5 +671,21 @@ class Sync extends _$Sync {
       print('[SyncProvider] pullCaregiversOnly FAILED (upsert): ${upsertResult.failureOrNull?.message}');
       return false;
     }
+  }
+}
+
+/// Provider for pending sync count for active baby
+/// 
+/// FIX P5: Used to show badge on sync icon in UI
+@riverpod
+class PendingSyncCount extends _$PendingSyncCount {
+  @override
+  Future<int> build() async {
+    final activeBaby = ref.watch(activeBabyProvider);
+    if (activeBaby == null) return 0;
+    
+    final localDataSource = SleepEventLocalDataSourceImpl();
+    final result = await localDataSource.getUnsyncedEvents(activeBaby.id);
+    return result.isSuccess ? (result.dataOrNull?.length ?? 0) : 0;
   }
 }

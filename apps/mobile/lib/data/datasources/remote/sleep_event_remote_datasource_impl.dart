@@ -148,6 +148,36 @@ class SleepEventRemoteDataSourceImpl implements SleepEventRemoteDataSource {
   }
 
   @override
+  Future<Result<SleepEventModel, Failure>> upsertSleepEventForSync(SleepEventModel event) async {
+    try {
+      _ensureAuthenticated();
+
+      // Try INSERT first (idempotent).
+      final eventData = _prepareEventForInsert(event);
+      final response = await _client
+          .from('sleep_events')
+          .insert(eventData)
+          .select()
+          .single();
+
+      return Success(SleepEventModel.fromJson(response));
+    } catch (e) {
+      final errorType = _classifyError(e);
+
+      // If already exists, we must UPDATE mutable fields to propagate corrections.
+      if (errorType == SyncErrorType.duplicate) {
+        final updateResult = await updateSleepEvent(event);
+        if (updateResult.isSuccess) {
+          return Success(updateResult.dataOrNull!);
+        }
+        return Error(updateResult.failureOrNull!);
+      }
+
+      return Error(_mapError(e));
+    }
+  }
+
+  @override
   Future<Result<SleepEventModel, Failure>> updateSleepEvent(SleepEventModel event) async {
     try {
       _ensureAuthenticated();

@@ -7,6 +7,7 @@ import 'package:temp_flutter/data/datasources/remote/baby_remote_datasource.dart
 import 'package:temp_flutter/data/datasources/remote/caregiver_remote_datasource.dart';
 import 'package:temp_flutter/data/datasources/remote/sleep_event_remote_datasource.dart';
 import 'package:temp_flutter/data/datasources/remote/sleep_event_remote_datasource_impl.dart';
+import 'package:temp_flutter/core/utils/agent_debug_log.dart';
 import 'package:temp_flutter/sync/sync_state.dart';
 
 /// Result of a layered sync operation
@@ -56,6 +57,12 @@ class LayeredSyncResult {
       errorMessage: errorMessage ?? this.errorMessage,
     );
   }
+}
+
+bool _isCorrectedByFkFailure(Failure failure) {
+  final msg = failure.message.toLowerCase();
+  return msg.contains('corrected_by_fkey') ||
+      (msg.contains('foreign key') && msg.contains('corrected_by'));
 }
 
 /// Layered Sync Orchestrator
@@ -477,45 +484,82 @@ class LayeredSyncOrchestrator {
     var errorCount = 0;
     var hasTransientError = false;
 
-    for (final event in unsyncedEvents) {
-      // Check if caregiver is synced (canonical) BEFORE attempting push
-      final caregiverSyncedResult = await _caregiverLocalDataSource.isCaregiverSynced(event.caregiverId);
-      if (caregiverSyncedResult.isError || caregiverSyncedResult.dataOrNull != true) {
-        // Caregiver not synced - this means canonicalization hasn't happened yet
-        // Mark event with clear error for diagnostics
-        await _eventLocalDataSource.markEventSyncError(
-          event.id,
-          'missing_remote_dependency',
-          'Caregiver ${event.caregiverId} not synced - run canonicalization first',
-        );
-        errorCount++;
-        // ignore: avoid_print
-        print('[LayeredSync] Event ${event.id} skipped: caregiver ${event.caregiverId} not synced (missing_remote_dependency)');
-        continue;
-      }
+    // #region agent log
+    agentDebugLog(
+      sessionId: 'debug-session',
+      runId: 'post-fix-1',
+      hypothesisId: 'Hsync',
+      location: 'layered_sync_orchestrator.dart:_pushEvents',
+      message: 'push events start',
+      data: <String, Object?>{
+        'unsyncedCount': unsyncedEvents.length,
+        'withCorrectedBy': unsyncedEvents.where((e) => e.correctedBy != null).length,
+        'isCorrectedTrue': unsyncedEvents.where((e) => e.isCorrected).length,
+      },
+    );
+    // #endregion
 
-      // Push event using the canonical caregiver_id already in SQLite
-      // (No per-event ID mapping needed after canonicalization)
-      final pushResult = await _eventRemoteDataSource.createSleepEvent(event);
+    // Retry loop to naturally satisfy corrected_by FK dependencies.
+    var pending = List.of(unsyncedEvents);
+    for (var pass = 1; pass <= 3 && pending.isNotEmpty; pass++) {
+      var progressed = false;
+      final nextPending = <dynamic>[];
 
-      if (pushResult.isSuccess) {
-        final now = DateTime.now().toUtc();
-        await _eventLocalDataSource.markEventSynced(event.id, now);
-        successCount++;
-        // ignore: avoid_print
-        print('[LayeredSync] Pushed event: ${event.id}');
-      } else {
+      for (final event in pending) {
+        // Check if caregiver is synced (canonical) BEFORE attempting push
+        final caregiverSyncedResult =
+            await _caregiverLocalDataSource.isCaregiverSynced(event.caregiverId);
+        if (caregiverSyncedResult.isError || caregiverSyncedResult.dataOrNull != true) {
+          await _eventLocalDataSource.markEventSyncError(
+            event.id,
+            'missing_remote_dependency',
+            'Caregiver ${event.caregiverId} not synced - run canonicalization first',
+          );
+          errorCount++;
+          // ignore: avoid_print
+          print('[LayeredSync] Event ${event.id} skipped: caregiver ${event.caregiverId} not synced (missing_remote_dependency)');
+          continue;
+        }
+
+        final pushResult = await _eventRemoteDataSource.upsertSleepEventForSync(event);
+        if (pushResult.isSuccess) {
+          final now = DateTime.now().toUtc();
+          await _eventLocalDataSource.markEventSynced(event.id, now);
+          successCount++;
+          progressed = true;
+          // ignore: avoid_print
+          print('[LayeredSync] Pushed event: ${event.id}');
+          continue;
+        }
+
         final failure = pushResult.failureOrNull!;
-        
-        // Classify error
         final errorType = _classifyFailure(failure);
-        
+
         if (errorType == SyncErrorType.transient) {
           hasTransientError = true;
           break;
         }
-        
-        // Permanent error - mark in metadata
+
+        if (_isCorrectedByFkFailure(failure) && pass < 3) {
+          // #region agent log
+          agentDebugLog(
+            sessionId: 'debug-session',
+            runId: 'post-fix-1',
+            hypothesisId: 'Hsync',
+            location: 'layered_sync_orchestrator.dart:_pushEvents',
+            message: 'deferring event due to corrected_by FK (will retry)',
+            data: <String, Object?>{
+              'pass': pass,
+              'eventId': event.id,
+              'correctedBy': event.correctedBy,
+              'isCorrected': event.isCorrected,
+            },
+          );
+          // #endregion
+          nextPending.add(event);
+          continue;
+        }
+
         await _eventLocalDataSource.markEventSyncError(
           event.id,
           errorType.name,
@@ -525,6 +569,10 @@ class LayeredSyncOrchestrator {
         // ignore: avoid_print
         print('[LayeredSync] Failed to push event ${event.id}: ${failure.message}');
       }
+
+      pending = nextPending.cast();
+      if (hasTransientError) break;
+      if (!progressed) break;
     }
 
     return Success(_PushLayerResult(
@@ -549,40 +597,81 @@ class LayeredSyncOrchestrator {
     var errorCount = 0;
     var hasTransientError = false;
 
-    for (final event in unsyncedEvents) {
-      // Check if caregiver is synced (canonical)
-      final caregiverSyncedResult = await _caregiverLocalDataSource.isCaregiverSynced(event.caregiverId);
-      if (caregiverSyncedResult.isError || caregiverSyncedResult.dataOrNull != true) {
-        // Mark event with clear error for diagnostics
-        await _eventLocalDataSource.markEventSyncError(
-          event.id,
-          'missing_remote_dependency',
-          'Caregiver ${event.caregiverId} not synced - run canonicalization first',
-        );
-        errorCount++;
-        // ignore: avoid_print
-        print('[LayeredSync] Event ${event.id} skipped: caregiver ${event.caregiverId} not synced (missing_remote_dependency)');
-        continue;
-      }
+    // #region agent log
+    agentDebugLog(
+      sessionId: 'debug-session',
+      runId: 'post-fix-1',
+      hypothesisId: 'Hsync',
+      location: 'layered_sync_orchestrator.dart:_pushEventsForBaby',
+      message: 'push events start',
+      data: <String, Object?>{
+        'babyId': babyId,
+        'unsyncedCount': unsyncedEvents.length,
+        'withCorrectedBy': unsyncedEvents.where((e) => e.correctedBy != null).length,
+        'isCorrectedTrue': unsyncedEvents.where((e) => e.isCorrected).length,
+      },
+    );
+    // #endregion
 
-      // Push event using the canonical caregiver_id already in SQLite
-      final pushResult = await _eventRemoteDataSource.createSleepEvent(event);
+    var pending = List.of(unsyncedEvents);
+    for (var pass = 1; pass <= 3 && pending.isNotEmpty; pass++) {
+      var progressed = false;
+      final nextPending = <dynamic>[];
 
-      if (pushResult.isSuccess) {
-        final now = DateTime.now().toUtc();
-        await _eventLocalDataSource.markEventSynced(event.id, now);
-        successCount++;
-        // ignore: avoid_print
-        print('[LayeredSync] Pushed event: ${event.id}');
-      } else {
+      for (final event in pending) {
+        final caregiverSyncedResult =
+            await _caregiverLocalDataSource.isCaregiverSynced(event.caregiverId);
+        if (caregiverSyncedResult.isError || caregiverSyncedResult.dataOrNull != true) {
+          await _eventLocalDataSource.markEventSyncError(
+            event.id,
+            'missing_remote_dependency',
+            'Caregiver ${event.caregiverId} not synced - run canonicalization first',
+          );
+          errorCount++;
+          // ignore: avoid_print
+          print('[LayeredSync] Event ${event.id} skipped: caregiver ${event.caregiverId} not synced (missing_remote_dependency)');
+          continue;
+        }
+
+        final pushResult = await _eventRemoteDataSource.upsertSleepEventForSync(event);
+        if (pushResult.isSuccess) {
+          final now = DateTime.now().toUtc();
+          await _eventLocalDataSource.markEventSynced(event.id, now);
+          successCount++;
+          progressed = true;
+          // ignore: avoid_print
+          print('[LayeredSync] Pushed event: ${event.id}');
+          continue;
+        }
+
         final failure = pushResult.failureOrNull!;
         final errorType = _classifyFailure(failure);
-        
+
         if (errorType == SyncErrorType.transient) {
           hasTransientError = true;
           break;
         }
-        
+
+        if (_isCorrectedByFkFailure(failure) && pass < 3) {
+          // #region agent log
+          agentDebugLog(
+            sessionId: 'debug-session',
+            runId: 'post-fix-1',
+            hypothesisId: 'Hsync',
+            location: 'layered_sync_orchestrator.dart:_pushEventsForBaby',
+            message: 'deferring event due to corrected_by FK (will retry)',
+            data: <String, Object?>{
+              'pass': pass,
+              'eventId': event.id,
+              'correctedBy': event.correctedBy,
+              'isCorrected': event.isCorrected,
+            },
+          );
+          // #endregion
+          nextPending.add(event);
+          continue;
+        }
+
         await _eventLocalDataSource.markEventSyncError(
           event.id,
           errorType.name,
@@ -592,6 +681,10 @@ class LayeredSyncOrchestrator {
         // ignore: avoid_print
         print('[LayeredSync] Failed to push event ${event.id}: ${failure.message}');
       }
+
+      pending = nextPending.cast();
+      if (hasTransientError) break;
+      if (!progressed) break;
     }
 
     return Success(_PushLayerResult(

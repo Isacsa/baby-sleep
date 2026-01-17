@@ -16,6 +16,7 @@ import 'package:temp_flutter/core/utils/uuid_generator.dart';
 import 'package:temp_flutter/core/utils/device_id_manager.dart';
 import 'active_baby_provider.dart';
 import 'auth_provider.dart';
+import 'sync_provider.dart';
 
 part 'sleep_events_provider.g.dart';
 
@@ -35,6 +36,33 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
   // Use getters to create fresh instances on each access
   // This avoids LateInitializationError when provider rebuilds
   SleepEventLocalDataSourceImpl get _localDataSource => SleepEventLocalDataSourceImpl();
+
+  /// Marks an existing event as corrected locally in a way that will actually sync.
+  ///
+  /// - Always sets `isCorrected=true`
+  /// - Always clears `syncedAt` (so LayeredSync will push it again)
+  /// - Only sets `correctedBy = correctionEventId` if the event was previously synced.
+  ///   If the event was never synced, we avoid setting `correctedBy` to prevent
+  ///   corrected_by FK cycles on first push; the correction event still points to the original.
+  SleepEvent _markOriginalCorrectedForLocal({
+    required SleepEvent original,
+    required String correctionEventId,
+  }) {
+    final attachCorrectedBy = original.syncedAt != null;
+    return SleepEvent(
+      id: original.id,
+      babyId: original.babyId,
+      type: original.type,
+      timestamp: original.timestamp,
+      caregiverId: original.caregiverId,
+      deviceId: original.deviceId,
+      createdAt: original.createdAt,
+      isCorrected: true,
+      syncedAt: null,
+      correctedBy: attachCorrectedBy ? correctionEventId : null,
+      metadata: original.metadata,
+    );
+  }
 
   CreateSleepStart get _createSleepStartUseCase {
     final sleepEventRepository = SleepEventRepositoryImpl(
@@ -176,6 +204,26 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     
     final result = await AsyncValue.guard(() => _loadEvents(activeBaby.id));
     
+    // #region agent log H2 - Refresh load result
+    if (result.hasValue) {
+      final loadedEvents = result.value!;
+      final validLoaded = loadedEvents.where((e) => e.isValid).length;
+      // ignore: avoid_print
+      print('[DEBUG-H2] refresh() loaded: total=${loadedEvents.length}, valid=$validLoaded');
+      // Show most recent events
+      final sorted = List<SleepEvent>.from(loadedEvents)..sort((a, b) {
+        final ts = b.timestamp.compareTo(a.timestamp);
+        if (ts != 0) return ts;
+        return b.createdAt.compareTo(a.createdAt);
+      });
+      for (var i = 0; i < sorted.length && i < 5; i++) {
+        final e = sorted[i];
+        // ignore: avoid_print
+        print('[DEBUG-H2]   [$i] id=${e.id.substring(0, 8)}, type=${e.type.name}, ts=${e.timestamp}, isCorrected=${e.isCorrected}');
+      }
+    }
+    // #endregion
+    
     // Only apply result if we're still the most recent refresh
     // (addEvent or another refresh may have updated state since we started)
     if (_refreshSeq == mySeq) {
@@ -199,6 +247,9 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     
     final currentEvents = state.value ?? [];
     state = AsyncData([event, ...currentEvents]);
+    
+    // FIX P4: Trigger auto-sync after local change
+    ref.read(syncProvider.notifier).scheduleSyncAfterLocalChange(event.babyId);
   }
 
   /// Finds all sessions that overlap with the given interval [startUtc, endUtc]
@@ -590,6 +641,9 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     // STEP 3: Refresh to update UI and SleepState
     await refresh();
     
+    // FIX P4: Trigger auto-sync after transaction
+    ref.read(syncProvider.notifier).scheduleSyncAfterLocalChange(activeBaby.id);
+    
     // ignore: avoid_print
     print('[SleepEventsProvider] Session complete');
   }
@@ -607,8 +661,52 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     // ignore: avoid_print
     print('[SleepEventsProvider] overwriteAndCreateStart: ${overlappingSessions.length} sessions to overwrite');
     
+    // #region agent log H1 - Entry point
+    // ignore: avoid_print
+    print('[DEBUG-H1] overwriteAndCreateStart ENTRY: sessions=${overlappingSessions.length}, newStartTime=$newStartTime');
+    // #endregion
+    
     final user = ref.read(authProvider);
     final activeBaby = ref.read(activeBabyProvider);
+    
+    // #region agent log H1 - Check for orphan events in interval
+    final currentEvents = state.value ?? [];
+    final startUtc = newStartTime.toUtc();
+    final nowUtc = DateTime.now().toUtc();
+    final validEvents = currentEvents.where((e) => e.isValid).toList();
+    
+    // Find ALL events in the interval [newStart, now] - not just sessions
+    final eventsInInterval = validEvents.where((e) {
+      final ts = e.timestamp;
+      return (ts.isAfter(startUtc) || ts.isAtSameMomentAs(startUtc)) &&
+             (ts.isBefore(nowUtc) || ts.isAtSameMomentAs(nowUtc));
+    }).toList()..sort((a, b) => a.timestamp.compareTo(b.timestamp));
+    
+    // Collect all event IDs that will be corrected (from sessions)
+    final sessionEventIds = <String>{};
+    for (final session in overlappingSessions) {
+      sessionEventIds.add(session.startEvent.id);
+      if (session.endEvent != null) sessionEventIds.add(session.endEvent!.id);
+    }
+    
+    // Find orphan events that are in interval but NOT in any detected session
+    final orphanEvents = eventsInInterval.where((e) => !sessionEventIds.contains(e.id)).toList();
+    
+    // ignore: avoid_print
+    print('[DEBUG-H1-ORPHAN] Events in interval [$startUtc, $nowUtc]: ${eventsInInterval.length}');
+    for (final e in eventsInInterval) {
+      // ignore: avoid_print
+      print('[DEBUG-H1-ORPHAN]   ${e.id.substring(0, 8)} ${e.type.name} ts=${e.timestamp} inSession=${sessionEventIds.contains(e.id)}');
+    }
+    if (orphanEvents.isNotEmpty) {
+      // ignore: avoid_print
+      print('[DEBUG-H1-ORPHAN] *** ORPHAN EVENTS NOT BEING CORRECTED: ${orphanEvents.length} ***');
+      for (final e in orphanEvents) {
+        // ignore: avoid_print
+        print('[DEBUG-H1-ORPHAN]   ORPHAN: ${e.id.substring(0, 8)} ${e.type.name} ts=${e.timestamp}');
+      }
+    }
+    // #endregion
     
     if (user == null) {
       throw const SleepEventException('Utilizador não autenticado');
@@ -629,12 +727,10 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     for (final session in overlappingSessions) {
       // Mark start event as corrected
       final startCorrectionId = UuidGenerator.generate();
-      updates.add(SleepEventModel.fromDomain(
-        session.startEvent.copyWith(
-          isCorrected: true,
-          correctedBy: startCorrectionId,
-        ),
-      ));
+      updates.add(SleepEventModel.fromDomain(_markOriginalCorrectedForLocal(
+        original: session.startEvent,
+        correctionEventId: startCorrectionId,
+      )));
       
       // Create correction event for start (as domain then convert)
       final startCorrectionEvent = SleepEvent(
@@ -655,12 +751,10 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
       // If session has end event, mark it and create correction too
       if (session.endEvent != null) {
         final endCorrectionId = UuidGenerator.generate();
-        updates.add(SleepEventModel.fromDomain(
-          session.endEvent!.copyWith(
-            isCorrected: true,
-            correctedBy: endCorrectionId,
-          ),
-        ));
+        updates.add(SleepEventModel.fromDomain(_markOriginalCorrectedForLocal(
+          original: session.endEvent!,
+          correctionEventId: endCorrectionId,
+        )));
         
         final endCorrectionEvent = SleepEvent(
           id: endCorrectionId,
@@ -677,6 +771,33 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
         );
         inserts.add(SleepEventModel.fromDomain(endCorrectionEvent));
       }
+    }
+    
+    // FIX P1: Also correct orphan events in the interval [newStart, now]
+    for (final orphan in orphanEvents) {
+      final correctionId = UuidGenerator.generate();
+      updates.add(SleepEventModel.fromDomain(_markOriginalCorrectedForLocal(
+        original: orphan,
+        correctionEventId: correctionId,
+      )));
+      
+      // Create correction event for the orphan
+      final orphanCorrectionEvent = SleepEvent(
+        id: correctionId,
+        babyId: activeBaby.id,
+        type: orphan.type,
+        timestamp: orphan.timestamp,
+        caregiverId: orphan.caregiverId,
+        deviceId: deviceId,
+        createdAt: now,
+        isCorrected: true,
+        syncedAt: null,
+        correctedBy: orphan.id,
+        metadata: {'correction_reason': 'orphan_in_overwrite_interval'},
+      );
+      inserts.add(SleepEventModel.fromDomain(orphanCorrectionEvent));
+      // ignore: avoid_print
+      print('[DEBUG-H1-ORPHAN] CORRECTING orphan: ${orphan.id.substring(0, 8)} -> correction: ${correctionId.substring(0, 8)}');
     }
     
     // Create the new SleepStart event
@@ -701,6 +822,21 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     // ignore: avoid_print
     print('[SleepEventsProvider] Committing: ${inserts.length} inserts, ${updates.length} updates');
     
+    // #region agent log H1 - Pre-transaction details
+    // ignore: avoid_print
+    print('[DEBUG-H1] INSERTS:');
+    for (final ins in inserts) {
+      // ignore: avoid_print
+      print('[DEBUG-H1]   id=${ins.id}, type=${ins.type}, isCorrected=${ins.isCorrected}, correctedBy=${ins.correctedBy}, timestamp=${ins.timestamp}');
+    }
+    // ignore: avoid_print
+    print('[DEBUG-H1] UPDATES (marking as corrected):');
+    for (final upd in updates) {
+      // ignore: avoid_print
+      print('[DEBUG-H1]   id=${upd.id}, type=${upd.type}, isCorrected=${upd.isCorrected}, correctedBy=${upd.correctedBy}');
+    }
+    // #endregion
+    
     final saveResult = await _localDataSource.saveAndUpdateEventsInTransaction(
       inserts: inserts,
       updates: updates,
@@ -710,12 +846,45 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
       case Success():
         // ignore: avoid_print
         print('[SleepEventsProvider] Overwrite transaction committed');
+        // #region agent log H1 - Post-transaction
+        // ignore: avoid_print
+        print('[DEBUG-H1] Transaction SUCCESS - new SleepStart id=${newStartResult.dataOrNull!.id}');
+        // #endregion
       case Error(:final failure):
+        // ignore: avoid_print
+        print('[DEBUG-H1] Transaction FAILED: ${failure.message}');
         throw SleepEventException(failure.message);
     }
     
+    // #region agent log H2 - Pre-refresh state
+    // ignore: avoid_print
+    print('[DEBUG-H2] Before refresh - current state events: ${state.value?.length ?? 0}');
+    // #endregion
+    
     // Refresh state
     await refresh();
+    
+    // #region agent log H2 - Post-refresh state
+    final postRefreshEvents = state.value ?? [];
+    final postValidEvents = postRefreshEvents.where((e) => e.isValid).toList();
+    // ignore: avoid_print
+    print('[DEBUG-H2] After refresh - total events: ${postRefreshEvents.length}, valid events: ${postValidEvents.length}');
+    if (postValidEvents.isNotEmpty) {
+      final sorted = List<SleepEvent>.from(postValidEvents)..sort((a, b) {
+        final ts = b.timestamp.compareTo(a.timestamp);
+        if (ts != 0) return ts;
+        return b.createdAt.compareTo(a.createdAt);
+      });
+      final mostRecent = sorted.first;
+      // ignore: avoid_print
+      print('[DEBUG-H2] Most recent valid event: id=${mostRecent.id}, type=${mostRecent.type.name}, timestamp=${mostRecent.timestamp}');
+      // ignore: avoid_print
+      print('[DEBUG-H2] Derived isSleeping: ${mostRecent.type == SleepEventType.sleepStart}');
+    }
+    // #endregion
+    
+    // FIX P4: Trigger auto-sync after transaction
+    ref.read(syncProvider.notifier).scheduleSyncAfterLocalChange(activeBaby.id);
   }
 
   /// Overwrites overlapping sessions and creates a complete sleep session (Start + End)
@@ -751,18 +920,37 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     final now = DateTime.now().toUtc();
     final deviceId = await DeviceIdManager.getDeviceId();
     
+    // FIX P1: Find ALL events in interval [startUtc, endUtc] to detect orphans
+    final currentEvents = state.value ?? [];
+    final validEvents = currentEvents.where((e) => e.isValid).toList();
+    final eventsInInterval = validEvents.where((e) {
+      final ts = e.timestamp;
+      return (ts.isAfter(startUtc) || ts.isAtSameMomentAs(startUtc)) &&
+             (ts.isBefore(endUtc) || ts.isAtSameMomentAs(endUtc));
+    }).toList();
+    
+    // Collect session event IDs
+    final sessionEventIds = <String>{};
+    for (final session in overlappingSessions) {
+      sessionEventIds.add(session.startEvent.id);
+      if (session.endEvent != null) sessionEventIds.add(session.endEvent!.id);
+    }
+    
+    // Find orphan events
+    final orphanEvents = eventsInInterval.where((e) => !sessionEventIds.contains(e.id)).toList();
+    // ignore: avoid_print
+    print('[DEBUG-H1-SESSION] Events in interval [$startUtc, $endUtc]: ${eventsInInterval.length}, orphans: ${orphanEvents.length}');
+    
     final inserts = <SleepEventModel>[];
     final updates = <SleepEventModel>[];
     
     // Process each overlapping session (same as overwriteAndCreateStart)
     for (final session in overlappingSessions) {
       final startCorrectionId = UuidGenerator.generate();
-      updates.add(SleepEventModel.fromDomain(
-        session.startEvent.copyWith(
-          isCorrected: true,
-          correctedBy: startCorrectionId,
-        ),
-      ));
+      updates.add(SleepEventModel.fromDomain(_markOriginalCorrectedForLocal(
+        original: session.startEvent,
+        correctionEventId: startCorrectionId,
+      )));
       
       final startCorrectionEvent = SleepEvent(
         id: startCorrectionId,
@@ -781,12 +969,10 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
       
       if (session.endEvent != null) {
         final endCorrectionId = UuidGenerator.generate();
-        updates.add(SleepEventModel.fromDomain(
-          session.endEvent!.copyWith(
-            isCorrected: true,
-            correctedBy: endCorrectionId,
-          ),
-        ));
+        updates.add(SleepEventModel.fromDomain(_markOriginalCorrectedForLocal(
+          original: session.endEvent!,
+          correctionEventId: endCorrectionId,
+        )));
         
         final endCorrectionEvent = SleepEvent(
           id: endCorrectionId,
@@ -803,6 +989,32 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
         );
         inserts.add(SleepEventModel.fromDomain(endCorrectionEvent));
       }
+    }
+    
+    // FIX P1: Also correct orphan events in the interval [startUtc, endUtc]
+    for (final orphan in orphanEvents) {
+      final correctionId = UuidGenerator.generate();
+      updates.add(SleepEventModel.fromDomain(_markOriginalCorrectedForLocal(
+        original: orphan,
+        correctionEventId: correctionId,
+      )));
+      
+      final orphanCorrectionEvent = SleepEvent(
+        id: correctionId,
+        babyId: activeBaby.id,
+        type: orphan.type,
+        timestamp: orphan.timestamp,
+        caregiverId: orphan.caregiverId,
+        deviceId: deviceId,
+        createdAt: now,
+        isCorrected: true,
+        syncedAt: null,
+        correctedBy: orphan.id,
+        metadata: {'correction_reason': 'orphan_in_overwrite_interval'},
+      );
+      inserts.add(SleepEventModel.fromDomain(orphanCorrectionEvent));
+      // ignore: avoid_print
+      print('[DEBUG-H1-SESSION] CORRECTING orphan: ${orphan.id.substring(0, 8)} -> correction: ${correctionId.substring(0, 8)}');
     }
     
     // Create the new Start and End events
@@ -858,6 +1070,9 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     }
     
     await refresh();
+    
+    // FIX P4: Trigger auto-sync after transaction
+    ref.read(syncProvider.notifier).scheduleSyncAfterLocalChange(activeBaby.id);
   }
 
   // ========== MULTI-DEVICE CONFLICT DETECTION AND RESOLUTION ==========
@@ -870,6 +1085,12 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
   /// Returns list of conflict groups (empty if no conflicts).
   List<DuplicateStartConflict> detectDuplicateStartConflicts() {
     final events = state.value ?? [];
+    
+    // #region agent log H3/H5 - Conflict detection entry
+    // ignore: avoid_print
+    print('[DEBUG-H3] detectDuplicateStartConflicts CALLED - total events: ${events.length}');
+    // #endregion
+    
     final validEvents = events
         .where((e) => e.isValid)
         .toList()
@@ -878,6 +1099,15 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
         if (timestampCompare != 0) return timestampCompare;
         return a.createdAt.compareTo(b.createdAt);
       });
+    
+    // #region agent log H3 - Valid events for conflict check
+    // ignore: avoid_print
+    print('[DEBUG-H3] Valid events for conflict check: ${validEvents.length}');
+    for (final e in validEvents) {
+      // ignore: avoid_print
+      print('[DEBUG-H3]   id=${e.id.substring(0, 8)}, type=${e.type.name}, ts=${e.timestamp}, isCorrected=${e.isCorrected}');
+    }
+    // #endregion
     
     final conflicts = <DuplicateStartConflict>[];
     
@@ -937,6 +1167,20 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     // ignore: avoid_print
     print('[SleepEventsProvider] detectDuplicateStartConflicts: found ${conflicts.length} conflicts');
     
+    // #region agent log H3 - Conflict detection result
+    if (conflicts.isNotEmpty) {
+      // ignore: avoid_print
+      print('[DEBUG-H3] CONFLICTS FOUND:');
+      for (final c in conflicts) {
+        // ignore: avoid_print
+        print('[DEBUG-H3]   conflictTimestamp=${c.conflictTimestamp}, events=${c.events.map((e) => e.id.substring(0, 8)).toList()}');
+      }
+    } else {
+      // ignore: avoid_print
+      print('[DEBUG-H3] No conflicts detected');
+    }
+    // #endregion
+    
     return conflicts;
   }
 
@@ -992,12 +1236,10 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
       final correctionId = UuidGenerator.generate();
       
       // Mark loser as corrected
-      updates.add(SleepEventModel.fromDomain(
-        loser.copyWith(
-          isCorrected: true,
-          correctedBy: correctionId,
-        ),
-      ));
+      updates.add(SleepEventModel.fromDomain(_markOriginalCorrectedForLocal(
+        original: loser,
+        correctionEventId: correctionId,
+      )));
       
       // Create correction event (marks the original as invalid, points to it)
       final correctionEvent = SleepEvent(
@@ -1034,6 +1276,9 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     
     // Refresh to update UI
     await refresh();
+    
+    // FIX P4: Trigger auto-sync after conflict resolution
+    ref.read(syncProvider.notifier).scheduleSyncAfterLocalChange(activeBaby.id);
   }
 }
 
