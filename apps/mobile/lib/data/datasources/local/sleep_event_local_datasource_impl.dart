@@ -405,10 +405,7 @@ class SleepEventLocalDataSourceImpl implements SleepEventLocalDataSource {
               ? localCorrectedBy 
               : event.correctedBy;
           
-          // #region agent log FIX1
-          // ignore: avoid_print
-          print('[DEBUG-FIX1] upsertRemoteEvents: id=${event.id.substring(0, 8)}, localIsCorrected=$localIsCorrected, remoteIsCorrected=$remoteIsCorrected, effective=$effectiveIsCorrected');
-          // #endregion
+          // debug instrumentation removed
           
           final updateMap = {
             'is_corrected': effectiveIsCorrected ? 1 : 0,

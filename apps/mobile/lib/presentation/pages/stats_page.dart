@@ -3,9 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:temp_flutter/application/providers/active_baby_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
+import 'package:temp_flutter/application/providers/sleep_metrics_provider.dart';
+import 'package:temp_flutter/domain/analysis/sleep_metrics.dart';
 import 'package:temp_flutter/domain/value_objects/sleep_session.dart';
 import 'package:temp_flutter/presentation/theme/night_theme.dart';
-import 'package:temp_flutter/presentation/widgets/insight_card.dart';
 
 /// StatsPage - Tab Estatísticas
 /// 
@@ -28,6 +29,8 @@ class _StatsPageState extends ConsumerState<StatsPage> {
   Widget build(BuildContext context) {
     final activeBaby = ref.watch(activeBabyProvider);
     final eventsAsync = ref.watch(sleepEventsNotifierProvider);
+    final days = _isWeekly ? 7 : 30;
+    final metricsAsync = ref.watch(sleepMetricsWithLookbackProvider(days));
 
     if (activeBaby == null) {
       return const Center(
@@ -37,9 +40,8 @@ class _StatsPageState extends ConsumerState<StatsPage> {
 
     final events = eventsAsync.value ?? [];
     final sessions = SleepSession.fromEventList(events);
-    final days = _isWeekly ? 7 : 30;
     final dailyTotals = _calculateDailyTotals(sessions, days);
-    final insights = _generateInsights(sessions, dailyTotals, activeBaby.name);
+    final metrics = metricsAsync.valueOrEmpty;
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -114,35 +116,10 @@ class _StatsPageState extends ConsumerState<StatsPage> {
             const SizedBox(height: 24),
             
             // Summary stats
-            _buildSummaryRow(dailyTotals, sessions),
+            _buildSummaryRow(metrics),
             
             const SizedBox(height: 24),
             
-            // Insights
-            const Text(
-              'Insights',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: NightTheme.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            
-            if (insights.isEmpty)
-              const InsightCard(
-                icon: Icons.lightbulb_outline,
-                text: 'Regista mais algumas noites para ver insights personalizados.',
-              )
-            else
-              ...insights.map((insight) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: InsightCard(
-                  icon: insight.icon,
-                  text: insight.text,
-                ),
-              )),
-              
             const SizedBox(height: 24),
             
             // Baby info
@@ -153,20 +130,14 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     );
   }
 
-  Widget _buildSummaryRow(Map<DateTime, Duration> dailyTotals, List<SleepSession> sessions) {
-    // Calculate averages
-    Duration totalSleep = Duration.zero;
-    for (final duration in dailyTotals.values) {
-      totalSleep += duration;
-    }
-    final avgHours = dailyTotals.isNotEmpty 
-        ? totalSleep.inMinutes / dailyTotals.length / 60.0
+  Widget _buildSummaryRow(SleepMetrics metrics) {
+    // Calculate average from metrics
+    final daysWithData = metrics.daysWithData;
+    final totalMinutes = metrics.totalSleepByDay.values
+        .fold<int>(0, (sum, d) => sum + d.inMinutes);
+    final avgHours = daysWithData > 0 
+        ? totalMinutes / daysWithData / 60.0
         : 0.0;
-    
-    // Count naps (sessions < 3h)
-    final naps = sessions.where((s) => 
-      s.duration != null && s.duration!.inHours < 3
-    ).length;
     
     return Row(
       children: [
@@ -181,7 +152,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         Expanded(
           child: _SummaryCard(
             label: 'Total sestas',
-            value: naps.toString(),
+            value: metrics.napCountLast24h.toString(),
             icon: Icons.brightness_5,
           ),
         ),
@@ -189,7 +160,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         Expanded(
           child: _SummaryCard(
             label: 'Dias registados',
-            value: dailyTotals.length.toString(),
+            value: daysWithData.toString(),
             icon: Icons.calendar_today,
           ),
         ),
@@ -283,78 +254,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     return totals;
   }
 
-  List<_Insight> _generateInsights(
-    List<SleepSession> sessions,
-    Map<DateTime, Duration> dailyTotals,
-    String babyName,
-  ) {
-    final insights = <_Insight>[];
-    
-    if (dailyTotals.length < 3) {
-      return insights;
-    }
-
-    // Average sleep
-    final totalMinutes = dailyTotals.values.fold<int>(0, (sum, d) => sum + d.inMinutes);
-    final avgMinutes = totalMinutes / dailyTotals.length;
-    final avgHours = avgMinutes / 60;
-    
-    if (avgHours >= 10) {
-      insights.add(_Insight(
-        icon: Icons.check_circle_outline,
-        text: 'O $babyName está a dormir bem! Média de ${avgHours.toStringAsFixed(1)}h por dia.',
-      ));
-    } else if (avgHours < 8) {
-      insights.add(_Insight(
-        icon: Icons.info_outline,
-        text: 'O $babyName está a dormir menos que o esperado. Considera ajustar a rotina.',
-      ));
-    }
-    
-    // Consistency
-    if (dailyTotals.length >= 5) {
-      final values = dailyTotals.values.map((d) => d.inMinutes.toDouble()).toList();
-      final mean = values.reduce((a, b) => a + b) / values.length;
-      final variance = values.map((v) => (v - mean) * (v - mean)).reduce((a, b) => a + b) / values.length;
-      final stdDev = sqrt(variance);
-      
-      if (stdDev < 60) {
-        insights.add(_Insight(
-          icon: Icons.timeline,
-          text: 'O sono está muito consistente. Bom trabalho!',
-        ));
-      } else if (stdDev > 120) {
-        insights.add(_Insight(
-          icon: Icons.show_chart,
-          text: 'O sono tem variado bastante. Uma rotina mais regular pode ajudar.',
-        ));
-      }
-    }
-    
-    // Nap count
-    final recentNaps = sessions.where((s) {
-      if (s.duration == null || s.duration!.inHours >= 3) return false;
-      final daysAgo = DateTime.now().difference(s.startEvent.timestamp).inDays;
-      return daysAgo < 7;
-    }).length;
-    
-    if (recentNaps > 0) {
-      final avgNapsPerDay = recentNaps / min(7, dailyTotals.length);
-      insights.add(_Insight(
-        icon: Icons.brightness_5,
-        text: 'Média de ${avgNapsPerDay.toStringAsFixed(1)} sestas por dia esta semana.',
-      ));
-    }
-    
-    return insights;
-  }
-}
-
-class _Insight {
-  final IconData icon;
-  final String text;
-  
-  const _Insight({required this.icon, required this.text});
+  // Insights were moved to InsightsPage to keep Stats focused on charts/summary.
 }
 
 class _ToggleButton extends StatelessWidget {

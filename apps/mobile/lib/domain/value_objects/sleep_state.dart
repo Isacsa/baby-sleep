@@ -41,15 +41,6 @@ class SleepState {
 
     final lastEvent = validEvents.first;
     final isSleeping = lastEvent.type == SleepEventType.sleepStart;
-    
-    // #region agent log H10 - SleepState derivation
-    // ignore: avoid_print
-    print('[DEBUG-H10] SleepState.fromEvents: lastEvent.id=${lastEvent.id.substring(0, 8)}, type=${lastEvent.type.name}, timestamp=${lastEvent.timestamp}, createdAt=${lastEvent.createdAt}, isSleeping=$isSleeping');
-    final now = DateTime.now();
-    final diffMin = now.difference(lastEvent.timestamp).inMinutes;
-    // ignore: avoid_print
-    print('[DEBUG-H10] SleepState.fromEvents: now=$now, diffMinutes=$diffMin, diffHours=${diffMin ~/ 60}');
-    // #endregion
 
     return SleepState(
       isSleeping: isSleeping,

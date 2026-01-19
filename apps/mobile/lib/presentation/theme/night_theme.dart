@@ -36,6 +36,12 @@ class NightTheme {
   /// Erro/Alerta - Erros de sincronização (Rose 400)
   static const Color error = Color(0xFFFB7185);
   
+  /// Sucesso - Feedback positivo (Emerald 400)
+  static const Color success = Color(0xFF34D399);
+  
+  /// Warning - Atenção suave (Amber 400)
+  static const Color warning = Color(0xFFFBBF24);
+  
   /// Slate 200 - Body text
   static const Color textBody = Color(0xFFE2E8F0);
 

@@ -1,7 +1,7 @@
 # Project Context Pack (Handoff para Novo Chat)
 
-**Última atualização:** 2026-01-17  
-**Stack:** Flutter (mobile) + SQLite (offline-first) + Supabase (Auth + RLS + persistência + partilha)  
+**Última atualização:** 2026-01-19
+**Stack:** Flutter (mobile) + SQLite (offline-first) + Supabase (Auth + RLS + persistência + partilha)
 **Domínio:** tracking parental centrado no bebé (dados sensíveis)
 
 > **Regra de ouro:** a fonte de verdade do domínio/decisões está em `docs/*.txt` e nos `.md` do contrato. Evitar assumir decisões fora desses ficheiros.
@@ -14,7 +14,7 @@ App mobile offline-first para registo manual de sono de bebés:
 - Registo com **1–2 toques**, pensado para uso noturno
 - **Multi-cuidador** e **multi-device** desde início
 - **Estado derivado** no cliente (backend não calcula “a dormir/acordado”)
-- Convergência eventual via sync (push/pull)
+- Convergência eventual via sync (push/pull) + **auto-sync/auto-pull** no cliente
 
 Fontes:
 - `docs/00_product_vision.txt`
@@ -116,10 +116,16 @@ Resumo do que está implementado e estável:
 - Registo Start/End (inclui retroativo via quick chips e “Outra hora”)
 - Derivação de estado e sessões no cliente
 - Detecção de overlap por **intervalo** + fluxo “Substituir” (overwrite atómico SQLite)
-- Correções auditáveis (`is_corrected/corrected_by`, metadata)
+- Correções auditáveis (histórico preservado via `is_corrected` + `corrected_by` quando aplicável + `metadata`)
 - Multi-device: resolução determinística de starts duplicados + correção de eventos órfãos no overwrite
 - Sync robusto ao clock-skew (clamp + safety window) + auto-sync após ações (debounce)
+- **Auto-pull** em foreground + on-resume (para reduzir divergência entre devices sem esforço)
 - Indicador de pendentes (badge no chip de sync)
+- **Histórico (DayDetail)**: editar/eliminar **sessões completas** (com validação de overlap + correção auditável; não é hard delete)
+
+Notas importantes (implementação atual):
+- **“Eliminar” nunca apaga silenciosamente**: é uma correção (event-based). O histórico é preservado; o que some do UI normal é o evento/sessão por ficar `is_corrected=true`.
+- **Correções push-safe**: para evitar dependências FK/ciclos em push offline-first, a implementação usa `metadata['corrects_event_id']` no evento de correção, e o `corrected_by` no evento original é preenchido quando é seguro (ver `SleepEventsNotifier._markOriginalCorrectedForLocal`). Isto mantém convergência sem bloquear o utilizador.
 
 ---
 
@@ -140,6 +146,16 @@ Resumo do que está implementado e estável:
 - Sync em ambos
 - Confirmar que não bloqueia e converge
 
+### 8.4 Editar sessão (com e sem overlap)
+- Ir ao detalhe do dia (`DayDetailPage`) e abrir uma sessão completa
+- “Editar” → alterar início/fim
+- Caso **sem overlap**: guardar e confirmar que ambos devices convergem após auto-sync/auto-pull
+- Caso **com overlap**: confirmar que aparece aviso e que “Substituir” corrige sessões sobrepostas e converge
+
+### 8.5 Eliminar sessão (correção)
+- `DayDetailPage` → “Eliminar” numa sessão completa
+- Confirmar que desaparece do histórico normal e converge nos outros dispositivos
+
 ---
 
 ## 9) Mapa rápido de ficheiros (onde mexer para quê)
@@ -147,6 +163,7 @@ Resumo do que está implementado e estável:
 ### UI
 - `apps/mobile/lib/presentation/pages/home_sleep_page.dart`
 - `apps/mobile/lib/presentation/pages/day_detail_page.dart`
+- `apps/mobile/lib/presentation/pages/main_scaffold.dart` (lifecycle: auto-pull on resume/foreground)
 - `apps/mobile/lib/presentation/widgets/sync_status_chip.dart`
 
 ### Domain (derivação)
@@ -186,5 +203,40 @@ Padrão sugerido para novos módulos (ex.: diário/contexto, feeding, milestones
 ## 11) Limitações conhecidas (não bloqueantes, mas relevantes)
 
 - Como `created_at` é client-provided, clock-skew nunca fica “perfeito” só com heurísticas; o pull atual mitiga com clamp/buffer. Uma melhoria futura é migrar incremental pull para cursor canónico baseado em `synced_at` server-generated (ver `docs/09_sleep_feature_handoff.md`).
-- Auto-sync está desenhado para UX “sem esforço”, mas pode evoluir para backoff e triggers por conectividade/resume quando fizer sentido.
+- Auto-sync/auto-pull está desenhado para UX “sem esforço”, mas pode evoluir para backoff e triggers por conectividade quando fizer sentido.
 
+---
+
+## 12) Próxima feature: Análise do Sono + Insights + Guia para Pais (novo trabalho)
+
+### 12.1 Objetivo do módulo
+Com base **apenas** no sono de cada bebé (eventos e sessões derivadas), gerar:
+- **Insights detalhados** sobre o padrão daquele bebé (sempre em tom positivo/educado).
+- **Planos/Guias práticos** (ex.: sugestões de rotina, consistência, próximos passos) sem culpabilizar os pais.
+
+### 12.2 Regras não negociáveis (herdadas do core)
+- **Offline-first**: insights funcionam sem rede (tudo o que der para calcular deve ser local).
+- **Centrado no bebé**: o output é por `baby_id` (multi-bebé desde início).
+- **Event-based**: insights são derivados do timeline (não criar “estado” persistido como fonte de verdade).
+- **Privacidade**: evitar PII em logs; evitar “comparação entre utilizadores”. Se houver “referências”, devem ser **genéricas** (ex.: ranges públicos por idade), nunca dados de outros utilizadores.
+
+### 12.3 Inputs/Outputs (proposta operacional para começar sem risco)
+- **Input**: lista de `SleepEvent` (válidos) → `SleepSession` derivadas → agregados por dia/semana.
+- **Output**: objetos de UI “read-only” (ex.: `SleepInsightCard`, `SleepSummary`, “Guia de hoje”), calculados on-device.
+- **Importante**: este módulo **não deve escrever** na DB nem alterar eventos; apenas ler e derivar.
+
+### 12.4 Estratégia de implementação (para novo chat começar rápido)
+- Criar uma camada “analysis” no **Domain** (serviço puro) que recebe eventos/sessões e devolve:
+  - métricas (ex.: total por dia, consistência, hora média de início, variabilidade)
+  - insights (mensagens com prioridade/categoria)
+  - sugestões (passos pequenos, tom positivo)
+- Criar providers na **Application** que:
+  - observam `sleepEventsNotifierProvider`
+  - calculam insights em background (sem bloquear UI)
+  - cacheiam resultados por `baby_id` e janela temporal
+- Criar UI dedicada (ex.: página “Insights”) com cards, e um resumo leve na Home.
+
+### 12.5 Guardrails de produto (para “mundo real”)
+- Evitar linguagem médica/diagnóstica (“insónia”, “distúrbio”, etc.). Preferir: “padrão”, “tendência”, “pode ajudar”.
+- Sempre oferecer explicações simples e acionáveis; nunca alarmista.
+- Não expor dados sensíveis em logs/analytics; qualquer telemetry deve ser opt-in e agregada.

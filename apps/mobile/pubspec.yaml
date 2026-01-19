@@ -106,3 +106,4 @@ flutter:
   # Environment configuration
   assets:
     - .env
+    - assets/curated/

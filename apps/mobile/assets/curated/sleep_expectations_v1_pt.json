@@ -1,0 +1,217 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": "2026-01-19",
+  "source": "Curated from pediatric sleep research - bundled asset",
+  "bands": [
+    {
+      "ageBand": "newborn0to28d",
+      "totalSleep24hMin": 840,
+      "totalSleep24hMax": 1080,
+      "nightSleepMin": 480,
+      "nightSleepMax": 600,
+      "napCountMin": 4,
+      "napCountMax": 8,
+      "wakeWindowDayMin": 45,
+      "wakeWindowDayMax": 60,
+      "wakeWindowPreBedMin": 45,
+      "wakeWindowPreBedMax": 60,
+      "bedtimeWindowStart": "19:00",
+      "bedtimeWindowEnd": "23:00",
+      "descriptionPt": "Os recém-nascidos dormem muito mas de forma fragmentada, acordando frequentemente para comer. Isto é completamente normal.",
+      "commonChallengesPt": [
+        "Confusão dia/noite",
+        "Acordar frequentemente para comer",
+        "Sono leve e fragmentado"
+      ]
+    },
+    {
+      "ageBand": "months1to2",
+      "totalSleep24hMin": 840,
+      "totalSleep24hMax": 1020,
+      "nightSleepMin": 480,
+      "nightSleepMax": 600,
+      "napCountMin": 4,
+      "napCountMax": 6,
+      "wakeWindowDayMin": 60,
+      "wakeWindowDayMax": 90,
+      "wakeWindowPreBedMin": 60,
+      "wakeWindowPreBedMax": 90,
+      "bedtimeWindowStart": "19:00",
+      "bedtimeWindowEnd": "22:00",
+      "descriptionPt": "O bebé começa a distinguir dia de noite. Períodos de sono nocturno podem alongar-se ligeiramente.",
+      "commonChallengesPt": [
+        "Cólicas podem afetar o sono",
+        "Ainda acorda várias vezes à noite",
+        "Sestas irregulares"
+      ]
+    },
+    {
+      "ageBand": "months2to4",
+      "totalSleep24hMin": 840,
+      "totalSleep24hMax": 960,
+      "nightSleepMin": 540,
+      "nightSleepMax": 660,
+      "napCountMin": 3,
+      "napCountMax": 5,
+      "wakeWindowDayMin": 75,
+      "wakeWindowDayMax": 120,
+      "wakeWindowPreBedMin": 90,
+      "wakeWindowPreBedMax": 120,
+      "bedtimeWindowStart": "18:30",
+      "bedtimeWindowEnd": "21:00",
+      "descriptionPt": "Os padrões de sono começam a consolidar-se. Pode ocorrer a regressão dos 4 meses.",
+      "commonChallengesPt": [
+        "Regressão dos 4 meses",
+        "Maior consciência do ambiente",
+        "Sestas podem encurtar temporariamente"
+      ]
+    },
+    {
+      "ageBand": "months4to6",
+      "totalSleep24hMin": 720,
+      "totalSleep24hMax": 900,
+      "nightSleepMin": 540,
+      "nightSleepMax": 720,
+      "napCountMin": 3,
+      "napCountMax": 4,
+      "wakeWindowDayMin": 105,
+      "wakeWindowDayMax": 150,
+      "wakeWindowPreBedMin": 120,
+      "wakeWindowPreBedMax": 180,
+      "bedtimeWindowStart": "18:00",
+      "bedtimeWindowEnd": "20:30",
+      "descriptionPt": "O sono nocturno torna-se mais longo. Muitos bebés começam a dormir 6-8h seguidas.",
+      "commonChallengesPt": [
+        "Transição para menos sestas",
+        "Maior mobilidade pode afetar o sono",
+        "Início da dentição"
+      ]
+    },
+    {
+      "ageBand": "months6to9",
+      "totalSleep24hMin": 720,
+      "totalSleep24hMax": 870,
+      "nightSleepMin": 600,
+      "nightSleepMax": 720,
+      "napCountMin": 2,
+      "napCountMax": 3,
+      "wakeWindowDayMin": 150,
+      "wakeWindowDayMax": 210,
+      "wakeWindowPreBedMin": 180,
+      "wakeWindowPreBedMax": 240,
+      "bedtimeWindowStart": "18:00",
+      "bedtimeWindowEnd": "20:00",
+      "descriptionPt": "Muitos bebés fazem 2-3 sestas e dormem bem de noite. A ansiedade de separação pode surgir.",
+      "commonChallengesPt": [
+        "Ansiedade de separação",
+        "Gatinhar/sentar pode interromper o sono",
+        "Transição para 2 sestas"
+      ]
+    },
+    {
+      "ageBand": "months9to12",
+      "totalSleep24hMin": 660,
+      "totalSleep24hMax": 840,
+      "nightSleepMin": 600,
+      "nightSleepMax": 720,
+      "napCountMin": 2,
+      "napCountMax": 2,
+      "wakeWindowDayMin": 180,
+      "wakeWindowDayMax": 240,
+      "wakeWindowPreBedMin": 210,
+      "wakeWindowPreBedMax": 270,
+      "bedtimeWindowStart": "18:00",
+      "bedtimeWindowEnd": "20:00",
+      "descriptionPt": "A maioria dos bebés está em 2 sestas. Noites mais consistentes são comuns.",
+      "commonChallengesPt": [
+        "Andar/ficar de pé no berço",
+        "Regressão dos 8-10 meses",
+        "Maior resistência a dormir"
+      ]
+    },
+    {
+      "ageBand": "months12to18",
+      "totalSleep24hMin": 660,
+      "totalSleep24hMax": 840,
+      "nightSleepMin": 600,
+      "nightSleepMax": 720,
+      "napCountMin": 1,
+      "napCountMax": 2,
+      "wakeWindowDayMin": 210,
+      "wakeWindowDayMax": 300,
+      "wakeWindowPreBedMin": 270,
+      "wakeWindowPreBedMax": 330,
+      "bedtimeWindowStart": "18:30",
+      "bedtimeWindowEnd": "20:00",
+      "descriptionPt": "Transição para 1 sesta acontece para muitos bebés. Noites de 10-12h são típicas.",
+      "commonChallengesPt": [
+        "Transição de 2 para 1 sesta",
+        "Maior independência e resistência",
+        "Picos de desenvolvimento"
+      ]
+    },
+    {
+      "ageBand": "months18to24",
+      "totalSleep24hMin": 660,
+      "totalSleep24hMax": 840,
+      "nightSleepMin": 600,
+      "nightSleepMax": 720,
+      "napCountMin": 1,
+      "napCountMax": 1,
+      "wakeWindowDayMin": 300,
+      "wakeWindowDayMax": 360,
+      "wakeWindowPreBedMin": 300,
+      "wakeWindowPreBedMax": 360,
+      "bedtimeWindowStart": "19:00",
+      "bedtimeWindowEnd": "20:30",
+      "descriptionPt": "Uma sesta de 1-2h é típica. O sono nocturno deve estar consolidado.",
+      "commonChallengesPt": [
+        "Regressão dos 2 anos",
+        "Medos e pesadelos podem começar",
+        "Maior autonomia e vontade própria"
+      ]
+    },
+    {
+      "ageBand": "years2to3",
+      "totalSleep24hMin": 600,
+      "totalSleep24hMax": 780,
+      "nightSleepMin": 540,
+      "nightSleepMax": 720,
+      "napCountMin": 0,
+      "napCountMax": 1,
+      "wakeWindowDayMin": 360,
+      "wakeWindowDayMax": 420,
+      "wakeWindowPreBedMin": 360,
+      "wakeWindowPreBedMax": 420,
+      "bedtimeWindowStart": "19:00",
+      "bedtimeWindowEnd": "21:00",
+      "descriptionPt": "Algumas crianças deixam de fazer sesta. 10-12h de sono nocturno são normais.",
+      "commonChallengesPt": [
+        "Transição para cama",
+        "Deixar a sesta",
+        "Resistência ao deitar aumentada"
+      ]
+    },
+    {
+      "ageBand": "years3plus",
+      "totalSleep24hMin": 540,
+      "totalSleep24hMax": 720,
+      "nightSleepMin": 540,
+      "nightSleepMax": 720,
+      "napCountMin": 0,
+      "napCountMax": 0,
+      "wakeWindowDayMin": 420,
+      "wakeWindowDayMax": 480,
+      "wakeWindowPreBedMin": 420,
+      "wakeWindowPreBedMax": 480,
+      "bedtimeWindowStart": "19:00",
+      "bedtimeWindowEnd": "21:00",
+      "descriptionPt": "A maioria das crianças não faz sesta. 10-12h de sono nocturno são adequadas.",
+      "commonChallengesPt": [
+        "Pesadelos e terrores noturnos",
+        "Resistência ao deitar",
+        "Necessidade de rotina consistente"
+      ]
+    }
+  ]
+}

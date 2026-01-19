@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:temp_flutter/core/types/result.dart' as core;
 import 'package:temp_flutter/sync/sync_state.dart';
@@ -18,15 +17,6 @@ import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
 
 part 'sync_provider.g.dart';
-
-// #region agent log helper
-void _debugLogSync(String hypothesisId, String location, String message, Map<String, dynamic> data) {
-  try {
-    final logEntry = '{"hypothesisId":"$hypothesisId","location":"$location","message":"$message","data":${data.toString().replaceAll("'", '"')},"timestamp":${DateTime.now().millisecondsSinceEpoch},"sessionId":"debug-session"}\n';
-    File('/Users/isacsa/baby_sleep_monitor/baby-sleep/.cursor/debug.log').writeAsStringSync(logEntry, mode: FileMode.append);
-  } catch (_) {}
-}
-// #endregion
 
 /// Sync provider
 /// 
@@ -511,9 +501,6 @@ class Sync extends _$Sync {
   /// 
   /// The UI only needs to observe SyncState and call this single method.
   Future<void> syncNowForBaby(String babyId) async {
-    // #region agent log H4
-    _debugLogSync('H4', 'sync_provider:syncNowForBaby:entry', 'syncNowForBaby CALLED', {'babyId': babyId});
-    // #endregion
     state = SyncState.syncing(pendingEventsCount: 0);
     // ignore: avoid_print
     print('[SyncProvider] syncNowForBaby START: babyId=$babyId');
