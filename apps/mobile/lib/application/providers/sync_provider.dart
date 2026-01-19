@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:temp_flutter/core/types/result.dart' as core;
 import 'package:temp_flutter/sync/sync_state.dart';
@@ -14,10 +15,18 @@ import 'package:temp_flutter/application/providers/active_baby_provider.dart';
 import 'package:temp_flutter/application/providers/babies_provider.dart';
 import 'package:temp_flutter/application/providers/caregivers_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
-import 'package:temp_flutter/application/providers/sleep_state_provider.dart';
 import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
 
 part 'sync_provider.g.dart';
+
+// #region agent log helper
+void _debugLogSync(String hypothesisId, String location, String message, Map<String, dynamic> data) {
+  try {
+    final logEntry = '{"hypothesisId":"$hypothesisId","location":"$location","message":"$message","data":${data.toString().replaceAll("'", '"')},"timestamp":${DateTime.now().millisecondsSinceEpoch},"sessionId":"debug-session"}\n';
+    File('/Users/isacsa/baby_sleep_monitor/baby-sleep/.cursor/debug.log').writeAsStringSync(logEntry, mode: FileMode.append);
+  } catch (_) {}
+}
+// #endregion
 
 /// Sync provider
 /// 
@@ -40,12 +49,21 @@ class Sync extends _$Sync {
   // FIX P4: Auto-sync after local changes
   Timer? _autoSyncTimer;
   bool _autoSyncInProgress = false;
+  
+  // AUTO-PULL: Polling periódico para receber eventos de outros devices
+  Timer? _autoPullTimer;
+  bool _autoPullInProgress = false;
+  String? _autoPullBabyId;
+  static const Duration _autoPullBaseInterval = Duration(seconds: 20);
+  static const Duration _autoPullMaxInterval = Duration(minutes: 2);
+  Duration _autoPullCurrentInterval = _autoPullBaseInterval;
 
   @override
   SyncState build() {
-    // Cancel timer on dispose
+    // Cancel timers on dispose
     ref.onDispose(() {
       _autoSyncTimer?.cancel();
+      _autoPullTimer?.cancel();
     });
     return SyncState.initial();
   }
@@ -127,6 +145,165 @@ class Sync extends _$Sync {
       print('[SyncProvider] Auto-sync ERROR: $e');
     } finally {
       _autoSyncInProgress = false;
+    }
+  }
+  
+  // ========== AUTO-PULL (Polling para receber eventos de outros devices) ==========
+  
+  /// Inicia o polling automático de eventos para o bebé ativo
+  /// 
+  /// Chamado pelo MainScaffold quando a app está em foreground.
+  /// Faz pull imediato + timer periódico (20s base, backoff em erro).
+  void startAutoPull({required String babyId}) {
+    // Se já está a correr para o mesmo baby, não reiniciar
+    if (_autoPullBabyId == babyId && _autoPullTimer != null) {
+      // ignore: avoid_print
+      print('[SyncProvider] Auto-pull already running for babyId=$babyId');
+      return;
+    }
+    
+    // Parar polling anterior (se existir)
+    stopAutoPull();
+    
+    _autoPullBabyId = babyId;
+    _autoPullCurrentInterval = _autoPullBaseInterval;
+    
+    // ignore: avoid_print
+    print('[SyncProvider] Auto-pull START: babyId=$babyId, interval=${_autoPullCurrentInterval.inSeconds}s');
+    
+    // Pull imediato ao iniciar
+    _pullInBackground(babyId);
+    
+    // Iniciar timer periódico
+    _startAutoPullTimer();
+  }
+  
+  /// Para o polling automático
+  /// 
+  /// Chamado quando a app vai para background ou não há baby ativo.
+  void stopAutoPull() {
+    _autoPullTimer?.cancel();
+    _autoPullTimer = null;
+    
+    if (_autoPullBabyId != null) {
+      // ignore: avoid_print
+      print('[SyncProvider] Auto-pull STOP: babyId=$_autoPullBabyId');
+    }
+    _autoPullBabyId = null;
+  }
+  
+  /// Chamado quando a app volta ao foreground (resume)
+  /// 
+  /// Faz pull imediato + reinicia timer.
+  void onAppResumed() {
+    final babyId = _autoPullBabyId;
+    if (babyId == null) {
+      // ignore: avoid_print
+      print('[SyncProvider] onAppResumed: no active baby, skipping');
+      return;
+    }
+    
+    // ignore: avoid_print
+    print('[SyncProvider] onAppResumed: babyId=$babyId, pulling now + restarting timer');
+    
+    // Reset backoff ao voltar
+    _autoPullCurrentInterval = _autoPullBaseInterval;
+    
+    // Pull imediato
+    _pullInBackground(babyId);
+    
+    // Reiniciar timer
+    _startAutoPullTimer();
+  }
+  
+  /// Chamado quando a app vai para background (paused/inactive/detached)
+  /// 
+  /// Para o timer mas mantém o babyId para retomar no resume.
+  void onAppPaused() {
+    _autoPullTimer?.cancel();
+    _autoPullTimer = null;
+    // ignore: avoid_print
+    print('[SyncProvider] onAppPaused: timer stopped (babyId=$_autoPullBabyId preserved)');
+  }
+  
+  /// Inicia/reinicia o timer periódico
+  void _startAutoPullTimer() {
+    _autoPullTimer?.cancel();
+    _autoPullTimer = Timer.periodic(_autoPullCurrentInterval, (_) {
+      final babyId = _autoPullBabyId;
+      if (babyId != null) {
+        _pullInBackground(babyId);
+      }
+    });
+  }
+  
+  /// Faz pull em background sem alterar SyncState (UI não vê spinner)
+  /// 
+  /// Inclui gating de concorrência para evitar conflitos com:
+  /// - Auto-sync em progresso
+  /// - Outro auto-pull em progresso
+  /// - Sync manual em progresso
+  Future<void> _pullInBackground(String babyId) async {
+    // Gating: não correr se outra operação está em progresso
+    if (_autoPullInProgress) {
+      // ignore: avoid_print
+      print('[SyncProvider] Auto-pull skipped: already in progress');
+      return;
+    }
+    
+    if (_autoSyncInProgress) {
+      // ignore: avoid_print
+      print('[SyncProvider] Auto-pull skipped: auto-sync in progress');
+      return;
+    }
+    
+    if (state.status == SyncStatus.syncing) {
+      // ignore: avoid_print
+      print('[SyncProvider] Auto-pull skipped: manual sync in progress');
+      return;
+    }
+    
+    _autoPullInProgress = true;
+    // ignore: avoid_print
+    print('[SyncProvider] Auto-pull START: babyId=$babyId');
+    
+    try {
+      // Pull direto (não usa pullForBaby() para não alterar SyncState)
+      final result = await _pull.pullForBaby(babyId);
+      
+      if (result.isError) {
+        // Backoff: aumentar intervalo (máx 2min)
+        _autoPullCurrentInterval = Duration(
+          seconds: (_autoPullCurrentInterval.inSeconds * 2)
+              .clamp(0, _autoPullMaxInterval.inSeconds),
+        );
+        // ignore: avoid_print
+        print('[SyncProvider] Auto-pull FAILED: ${result.failureOrNull?.message}, '
+            'next interval=${_autoPullCurrentInterval.inSeconds}s');
+        
+        // Reiniciar timer com novo intervalo
+        _startAutoPullTimer();
+        return;
+      }
+      
+      // Sucesso: reset backoff
+      if (_autoPullCurrentInterval != _autoPullBaseInterval) {
+        _autoPullCurrentInterval = _autoPullBaseInterval;
+        _startAutoPullTimer(); // Reiniciar com intervalo base
+        // ignore: avoid_print
+        print('[SyncProvider] Auto-pull: backoff reset to ${_autoPullBaseInterval.inSeconds}s');
+      }
+      
+      // Invalidar caches para atualizar UI
+      _invalidateAfterSync();
+      // ignore: avoid_print
+      print('[SyncProvider] Auto-pull SUCCESS: babyId=$babyId');
+      
+    } catch (e) {
+      // ignore: avoid_print
+      print('[SyncProvider] Auto-pull ERROR: $e');
+    } finally {
+      _autoPullInProgress = false;
     }
   }
 
@@ -334,6 +511,9 @@ class Sync extends _$Sync {
   /// 
   /// The UI only needs to observe SyncState and call this single method.
   Future<void> syncNowForBaby(String babyId) async {
+    // #region agent log H4
+    _debugLogSync('H4', 'sync_provider:syncNowForBaby:entry', 'syncNowForBaby CALLED', {'babyId': babyId});
+    // #endregion
     state = SyncState.syncing(pendingEventsCount: 0);
     // ignore: avoid_print
     print('[SyncProvider] syncNowForBaby START: babyId=$babyId');
@@ -581,20 +761,25 @@ class Sync extends _$Sync {
   // ========== CACHE INVALIDATION ==========
   //
   // After sync operations (especially canonicalization which swaps caregiver PKs),
-  // in-memory provider caches may hold stale IDs. We invalidate them at the END
-  // of each sync operation to force a fresh read from SQLite.
+  // in-memory provider caches may hold stale IDs. We refresh them at the END
+  // of each sync operation to ensure UI has fresh data.
   //
   // IMPORTANT: Only call this ONCE at the end of a sync operation, NOT inside loops.
   // This prevents excessive rebuilds and potential loops.
+  //
+  // FIX UI FLICKER: Use refresh() instead of invalidate() for sleepEvents.
+  // refresh() uses copyWithPrevious to preserve UI state during loading,
+  // preventing the momentary "isSleeping=false" flicker.
+  // sleepStateNotifierProvider auto-reacts to sleepEvents, no separate invalidate needed.
 
-  /// Invalidates provider caches after sync to ensure UI has fresh data
+  /// Refreshes provider caches after sync to ensure UI has fresh data
   /// 
   /// This is called ONCE at the end of push/pull operations, not per-event.
-  /// Invalidates:
-  /// - caregiversNotifierProvider (may have swapped IDs after canonicalization)
-  /// - sleepEventsNotifierProvider (events may have new caregiver_id references)
-  /// - sleepStateNotifierProvider (derived from events, needs refresh)
-  /// - caregiverContextProvider (needs to re-verify after sync)
+  /// Actions:
+  /// - caregiversNotifierProvider: invalidate (no refresh method)
+  /// - sleepEventsNotifierProvider: refresh() with copyWithPrevious (prevents flicker)
+  /// - sleepStateNotifierProvider: NOT touched (auto-derives from sleepEvents)
+  /// - caregiverContextProvider: invalidate
   void _invalidateAfterSync() {
     void dbg(String msg) {
       assert(() {
@@ -603,23 +788,26 @@ class Sync extends _$Sync {
         return true;
       }());
     }
-    // === DEBUG LOG H3: Provider invalidation ===
-    dbg('[SyncProvider][H3-DEBUG] ===== INVALIDATING PROVIDERS =====');
-    dbg('[SyncProvider][H3-DEBUG] About to invalidate: caregivers, sleepEvents, sleepState, caregiverContext');
+    // === DEBUG LOG H3: Provider refresh ===
+    dbg('[SyncProvider][H3-DEBUG] ===== REFRESHING PROVIDERS =====');
+    dbg('[SyncProvider][H3-DEBUG] About to refresh: caregivers(inv), sleepEvents(refresh), caregiverContext(inv)');
     
     ref.invalidate(caregiversNotifierProvider);
     dbg('[SyncProvider][H3-DEBUG] Invalidated: caregiversNotifierProvider');
     
-    ref.invalidate(sleepEventsNotifierProvider);
-    dbg('[SyncProvider][H3-DEBUG] Invalidated: sleepEventsNotifierProvider');
+    // FIX UI FLICKER: Use refresh() instead of invalidate()
+    // refresh() preserves previous state during loading (copyWithPrevious)
+    // preventing UI from momentarily showing "Dormir agora" (isSleeping=false)
+    ref.read(sleepEventsNotifierProvider.notifier).refresh();
+    dbg('[SyncProvider][H3-DEBUG] Called refresh() on sleepEventsNotifierProvider');
     
-    ref.invalidate(sleepStateNotifierProvider);
-    dbg('[SyncProvider][H3-DEBUG] Invalidated: sleepStateNotifierProvider');
+    // NOTE: sleepStateNotifierProvider auto-reacts to sleepEventsNotifierProvider
+    // No need to invalidate it separately (and doing so would cause extra rebuilds)
     
     ref.invalidate(caregiverContextProvider);
     dbg('[SyncProvider][H3-DEBUG] Invalidated: caregiverContextProvider');
     
-    dbg('[SyncProvider][H3-DEBUG] ===== INVALIDATION COMPLETE =====');
+    dbg('[SyncProvider][H3-DEBUG] ===== REFRESH COMPLETE =====');
   }
 
   // ========== PULL CAREGIVERS ONLY ==========

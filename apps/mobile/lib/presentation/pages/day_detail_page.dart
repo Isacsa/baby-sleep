@@ -147,6 +147,8 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
                       ...sessions.reversed.map((session) => _SessionTile(
                         session: session,
                         selectedDate: _selectedDate,
+                        onEdit: session.isComplete ? () => _showEditSession(session) : null,
+                        onDelete: session.isComplete ? () => _confirmDeleteSession(session) : null,
                       )),
                   ],
                 ),
@@ -250,13 +252,544 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
       setState(() => _selectedDate = picked);
     }
   }
+
+  /// Shows confirmation dialog for deleting a session
+  Future<void> _confirmDeleteSession(SleepSession session) async {
+    final startLocal = session.startEvent.timestamp.toLocal();
+    final endLocal = session.endEvent!.timestamp.toLocal();
+    final startStr = '${startLocal.hour.toString().padLeft(2, '0')}:${startLocal.minute.toString().padLeft(2, '0')}';
+    final endStr = '${endLocal.hour.toString().padLeft(2, '0')}:${endLocal.minute.toString().padLeft(2, '0')}';
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: NightTheme.surface,
+        title: const Text(
+          'Eliminar sono?',
+          style: TextStyle(color: NightTheme.textPrimary),
+        ),
+        content: Text(
+          'Tens a certeza que queres eliminar o sono das $startStr às $endStr?',
+          style: const TextStyle(color: NightTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true && mounted) {
+      try {
+        await ref.read(sleepEventsNotifierProvider.notifier).deleteSleepSession(session: session);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Sono eliminado'),
+              backgroundColor: Colors.green,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } on SleepEventException catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erro: ${e.message}'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  /// Shows editor bottom sheet for editing a session
+  Future<void> _showEditSession(SleepSession session) async {
+    final result = await showModalBottomSheet<_EditSessionResult>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _EditSessionSheet(session: session),
+    );
+    
+    if (result != null && mounted) {
+      await _executeEdit(session, result.newStartTime, result.newEndTime, const []);
+    }
+  }
+
+  /// Executes the edit operation with overlap handling
+  Future<void> _executeEdit(
+    SleepSession session,
+    DateTime newStartTime,
+    DateTime newEndTime,
+    List<SleepSession> extraOverwrite,
+  ) async {
+    try {
+      await ref.read(sleepEventsNotifierProvider.notifier).editSleepSession(
+        original: session,
+        newStartTime: newStartTime,
+        newEndTime: newEndTime,
+        extraSessionsToOverwrite: extraOverwrite,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Sono editado'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } on OverlapException catch (e) {
+      // Show overlap confirmation dialog
+      if (mounted) {
+        final overwrite = await _showOverlapConfirmation(e.overlappingSessions);
+        if (overwrite == true) {
+          await _executeEdit(session, newStartTime, newEndTime, e.overlappingSessions);
+        }
+      }
+    } on SleepEventException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erro: ${e.message}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  /// Shows confirmation dialog for overlapping sessions
+  Future<bool?> _showOverlapConfirmation(List<SleepSession> overlapping) {
+    final sessionsStr = overlapping.map((s) {
+      final start = s.startEvent.timestamp.toLocal();
+      final end = s.endEvent?.timestamp.toLocal();
+      final startStr = '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
+      if (end != null) {
+        final endStr = '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
+        return '$startStr - $endStr';
+      }
+      return 'desde $startStr';
+    }).join(', ');
+    
+    return showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: NightTheme.surface,
+        title: const Text(
+          'Sobrepõe outro sono',
+          style: TextStyle(color: NightTheme.textPrimary),
+        ),
+        content: Text(
+          'O novo período sobrepõe: $sessionsStr\n\nQueres substituir?',
+          style: const TextStyle(color: NightTheme.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.orange),
+            child: const Text('Substituir'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
+/// Result from edit session sheet
+class _EditSessionResult {
+  final DateTime newStartTime;
+  final DateTime newEndTime;
+  
+  const _EditSessionResult({
+    required this.newStartTime,
+    required this.newEndTime,
+  });
+}
+
+/// Bottom sheet for editing a session's start and end times
+class _EditSessionSheet extends StatefulWidget {
+  final SleepSession session;
+  
+  const _EditSessionSheet({required this.session});
+
+  @override
+  State<_EditSessionSheet> createState() => _EditSessionSheetState();
+}
+
+class _EditSessionSheetState extends State<_EditSessionSheet> {
+  late DateTime _startDate;
+  late TimeOfDay _startTime;
+  late DateTime _endDate;
+  late TimeOfDay _endTime;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    final startLocal = widget.session.startEvent.timestamp.toLocal();
+    final endLocal = widget.session.endEvent!.timestamp.toLocal();
+    
+    _startDate = DateTime(startLocal.year, startLocal.month, startLocal.day);
+    _startTime = TimeOfDay(hour: startLocal.hour, minute: startLocal.minute);
+    _endDate = DateTime(endLocal.year, endLocal.month, endLocal.day);
+    _endTime = TimeOfDay(hour: endLocal.hour, minute: endLocal.minute);
+  }
+
+  DateTime _combineDateTime(DateTime date, TimeOfDay time) {
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
+  void _validate() {
+    final start = _combineDateTime(_startDate, _startTime);
+    final end = _combineDateTime(_endDate, _endTime);
+    
+    if (!end.isAfter(start)) {
+      setState(() => _errorMessage = 'A hora de fim deve ser depois do início');
+    } else {
+      setState(() => _errorMessage = null);
+    }
+  }
+
+  Future<void> _pickStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now(),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: NightTheme.primary,
+            surface: NightTheme.backgroundBase,
+            onSurface: NightTheme.textPrimary,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() => _startDate = picked);
+      _validate();
+    }
+  }
+
+  Future<void> _pickStartTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _startTime,
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: NightTheme.primary,
+            surface: NightTheme.backgroundBase,
+            onSurface: NightTheme.textPrimary,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() => _startTime = picked);
+      _validate();
+    }
+  }
+
+  Future<void> _pickEndDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _endDate,
+      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+      lastDate: DateTime.now().add(const Duration(days: 1)), // Allow tomorrow for cross-midnight
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: NightTheme.primary,
+            surface: NightTheme.backgroundBase,
+            onSurface: NightTheme.textPrimary,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() => _endDate = picked);
+      _validate();
+    }
+  }
+
+  Future<void> _pickEndTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _endTime,
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.dark(
+            primary: NightTheme.primary,
+            surface: NightTheme.backgroundBase,
+            onSurface: NightTheme.textPrimary,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+    if (picked != null) {
+      setState(() => _endTime = picked);
+      _validate();
+    }
+  }
+
+  void _submit() {
+    final start = _combineDateTime(_startDate, _startTime);
+    final end = _combineDateTime(_endDate, _endTime);
+    
+    if (!end.isAfter(start)) {
+      setState(() => _errorMessage = 'A hora de fim deve ser depois do início');
+      return;
+    }
+    
+    Navigator.of(context).pop(_EditSessionResult(
+      newStartTime: start,
+      newEndTime: end,
+    ));
+  }
+
+  String _formatDate(DateTime dt) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = today.subtract(const Duration(days: 1));
+    final date = DateTime(dt.year, dt.month, dt.day);
+    
+    if (date == today) return 'Hoje';
+    if (date == yesterday) return 'Ontem';
+    return '${dt.day}/${dt.month}';
+  }
+
+  String _formatTime(TimeOfDay t) {
+    return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
+      decoration: const BoxDecoration(
+        color: NightTheme.surface,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: NightTheme.textSecondary.withValues(alpha: 0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              
+              // Title
+              const Text(
+                'Editar sono',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w600,
+                  color: NightTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 24),
+              
+              // Start picker
+              const Text(
+                'Início',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: NightTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _DateTimeButton(
+                      icon: Icons.calendar_today,
+                      label: _formatDate(_startDate),
+                      onTap: _pickStartDate,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _DateTimeButton(
+                      icon: Icons.access_time,
+                      label: _formatTime(_startTime),
+                      onTap: _pickStartTime,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              // End picker
+              const Text(
+                'Fim',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: NightTheme.textSecondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _DateTimeButton(
+                      icon: Icons.calendar_today,
+                      label: _formatDate(_endDate),
+                      onTap: _pickEndDate,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _DateTimeButton(
+                      icon: Icons.access_time,
+                      label: _formatTime(_endTime),
+                      onTap: _pickEndTime,
+                    ),
+                  ),
+                ],
+              ),
+              
+              // Error message
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 12),
+                Text(
+                  _errorMessage!,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: Colors.red,
+                  ),
+                ),
+              ],
+              
+              const SizedBox(height: 24),
+              
+              // Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: NightTheme.textSecondary,
+                        side: BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.3)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text('Cancelar'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: _errorMessage == null ? _submit : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: NightTheme.primary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text('Guardar'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Simple date/time picker button
+class _DateTimeButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _DateTimeButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: NightTheme.backgroundBase,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 18, color: NightTheme.textSecondary),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w500,
+                color: NightTheme.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Session tile with edit/delete actions (only for complete sessions)
 class _SessionTile extends StatelessWidget {
   final SleepSession session;
   final DateTime selectedDate;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
-  const _SessionTile({required this.session, required this.selectedDate});
+  const _SessionTile({
+    required this.session,
+    required this.selectedDate,
+    this.onEdit,
+    this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -332,6 +865,7 @@ class _SessionTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Time range with ellipsis for overflow (FIX overflow)
                 Text(
                   timeRange,
                   style: const TextStyle(
@@ -339,9 +873,15 @@ class _SessionTile extends StatelessWidget {
                     fontWeight: FontWeight.w600,
                     color: NightTheme.textPrimary,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
-                Row(
+                // Use Wrap instead of Row to prevent overflow (FIX overflow)
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     Text(
                       isNap ? 'Sesta' : 'Sono noturno',
@@ -350,8 +890,7 @@ class _SessionTile extends StatelessWidget {
                         color: NightTheme.textSecondary,
                       ),
                     ),
-                    if (crossMidnightNote != null) ...[
-                      const SizedBox(width: 8),
+                    if (crossMidnightNote != null)
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
@@ -366,12 +905,12 @@ class _SessionTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                    ],
                   ],
                 ),
               ],
             ),
           ),
+          // Duration badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
@@ -387,6 +926,49 @@ class _SessionTile extends StatelessWidget {
               ),
             ),
           ),
+          // Actions menu (only for complete sessions)
+          if (session.isComplete) ...[
+            const SizedBox(width: 4),
+            PopupMenuButton<String>(
+              icon: Icon(
+                Icons.more_vert,
+                color: NightTheme.textSecondary.withValues(alpha: 0.6),
+                size: 20,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              splashRadius: 20,
+              onSelected: (value) {
+                if (value == 'edit') {
+                  onEdit?.call();
+                } else if (value == 'delete') {
+                  onDelete?.call();
+                }
+              },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(
+                    children: [
+                      Icon(Icons.edit, size: 18),
+                      SizedBox(width: 8),
+                      Text('Editar'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete, size: 18, color: Colors.red),
+                      SizedBox(width: 8),
+                      Text('Eliminar', style: TextStyle(color: Colors.red)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

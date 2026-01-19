@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,13 +7,21 @@ import 'package:temp_flutter/application/providers/sleep_state_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/application/providers/sync_provider.dart';
 import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
-// DeviceIdManager import removed - no longer needed for manual conflict resolution
 import 'package:temp_flutter/domain/entities/baby.dart';
 import 'package:temp_flutter/domain/entities/sleep_event.dart';
 import 'package:temp_flutter/domain/value_objects/sleep_session.dart';
 import 'package:temp_flutter/presentation/theme/night_theme.dart';
 import 'package:temp_flutter/presentation/widgets/sync_status_chip.dart';
 import 'package:temp_flutter/presentation/widgets/quick_time_chip.dart';
+
+// #region agent log helper
+void _debugLog(String hypothesisId, String location, String message, Map<String, dynamic> data) {
+  try {
+    final logEntry = '{"hypothesisId":"$hypothesisId","location":"$location","message":"$message","data":${data.toString().replaceAll("'", '"')},"timestamp":${DateTime.now().millisecondsSinceEpoch},"sessionId":"debug-session"}\n';
+    File('/Users/isacsa/baby_sleep_monitor/baby-sleep/.cursor/debug.log').writeAsStringSync(logEntry, mode: FileMode.append);
+  } catch (_) {}
+}
+// #endregion
 
 /// HomeSleepPage - Tab principal de Sono
 /// 
@@ -97,51 +106,126 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     await ref.read(caregiverContextProvider.notifier).ensureContext();
   }
 
-  /// Checks for duplicate SleepStart conflicts (multi-device) and resolves automatically
-  /// Uses last-write-wins (most recent createdAt) and shows informative snackbar
+  /// Checks for duplicate SleepStart conflicts (multi-device).
+  /// 
+  /// DISABLED: The automatic conflict detection was causing false positives
+  /// when there were old uncorrected SleepStart events. The normal sync 
+  /// mechanism (auto-pull + push) already handles convergence between devices.
+  /// 
+  /// The snackbar was confusing users by appearing constantly when there
+  /// wasn't a real "double-tap" conflict, just stale data.
   void _checkForDuplicateConflicts() {
-    if (!mounted) return;
-    
-    // #region agent log H5 - UI conflict check
-    debugPrint('[DEBUG-H5] _checkForDuplicateConflicts CALLED');
+    // #region agent log H6 - DISABLED
+    _debugLog('H6', 'home_sleep_page:checkConflicts', 'Conflict detection DISABLED - sync handles convergence', {});
     // #endregion
     
-    final conflicts = ref.read(sleepEventsNotifierProvider.notifier).detectDuplicateStartConflicts();
-    
-    // #region agent log H5 - Conflicts result
-    debugPrint('[DEBUG-H5] conflicts found: ${conflicts.length}');
-    // #endregion
-    
-    if (conflicts.isEmpty) return;
-    
-    // Resolve conflicts automatically without modal
-    for (final conflict in conflicts) {
-      // Create a unique ID for this conflict based on event IDs
-      final conflictId = conflict.events.map((e) => e.id).toList()..sort();
-      final conflictKey = conflictId.join('_');
-      
-      if (!_handledConflictIds.contains(conflictKey)) {
-        _handledConflictIds.add(conflictKey);
-        
-        // Resolve automatically: keep the most recent (first in sorted list - already sorted by createdAt DESC)
-        final keepEvent = conflict.suggestedWinner;
-        
-        debugPrint('[DEBUG-FIX2] Auto-resolving conflict: keeping ${keepEvent.id.substring(0, 8)}, discarding ${conflict.events.where((e) => e.id != keepEvent.id).map((e) => e.id.substring(0, 8)).toList()}');
-        
-        // Resolve in background and show snackbar
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _autoResolveConflict(conflict, keepEvent);
-          }
-        });
-        
-        // Handle one conflict at a time
-        break;
-      }
-    }
+    // DISABLED: Conflict detection was causing false positives.
+    // The sync mechanism already handles multi-device convergence.
+    // If real conflicts occur, the last-write-wins in remote + pull will resolve.
+    return;
   }
   
-  /// Automatically resolves a conflict and shows informative snackbar
+  /// Determines if a conflict is safe to auto-resolve.
+  /// 
+  /// Safe criteria (ALL must be true):
+  /// - All start timestamps within 2 minutes of each other (double-tap scenario)
+  /// - All starts within 10 minutes of now (not retroactive)
+  bool _isConflictSafeToAutoResolve(DuplicateStartConflict conflict) {
+    // #region agent log H2/H3
+    _debugLog('H2', 'home_sleep_page:isConflictSafe:entry', 'Checking if conflict is safe to auto-resolve', {'eventsCount': conflict.events.length, 'eventIds': conflict.events.map((e) => e.id.substring(0, 8)).toList().toString()});
+    // #endregion
+    
+    if (conflict.events.length < 2) return false;
+    
+    final timestamps = conflict.events.map((e) => e.timestamp).toList();
+    final minTs = timestamps.reduce((a, b) => a.isBefore(b) ? a : b);
+    final maxTs = timestamps.reduce((a, b) => a.isAfter(b) ? a : b);
+    
+    // Check 1: All timestamps within 2 minutes of each other
+    final timestampSpread = maxTs.difference(minTs);
+    // #region agent log H2/H3
+    _debugLog('H2', 'home_sleep_page:isConflictSafe:spreadCheck', 'Checking timestamp spread', {'spreadSeconds': timestampSpread.inSeconds, 'spreadMinutes': timestampSpread.inMinutes, 'minTs': minTs.toIso8601String(), 'maxTs': maxTs.toIso8601String(), 'passesCheck': timestampSpread.inMinutes <= 2});
+    // #endregion
+    if (timestampSpread.inMinutes > 2) {
+      debugPrint('[DEBUG-FIX2] Conflict NOT safe: timestamp spread=${timestampSpread.inSeconds}s (>2min)');
+      // #region agent log H2/H3
+      _debugLog('H2', 'home_sleep_page:isConflictSafe:REJECTED_SPREAD', 'Conflict rejected due to timestamp spread', {'spreadSeconds': timestampSpread.inSeconds});
+      // #endregion
+      return false;
+    }
+    
+    // Check 2: All starts within 10 minutes of now (not retroactive)
+    final now = DateTime.now();
+    final oldestStart = minTs;
+    final ageOfOldest = now.difference(oldestStart);
+    // #region agent log H2/H3
+    _debugLog('H3', 'home_sleep_page:isConflictSafe:ageCheck', 'Checking age of oldest start', {'ageMinutes': ageOfOldest.inMinutes, 'now': now.toIso8601String(), 'oldestStart': oldestStart.toIso8601String(), 'passesCheck': ageOfOldest.inMinutes <= 10});
+    // #endregion
+    if (ageOfOldest.inMinutes > 10) {
+      debugPrint('[DEBUG-FIX2] Conflict NOT safe: oldest start is ${ageOfOldest.inMinutes}min ago (>10min)');
+      // #region agent log H2/H3
+      _debugLog('H3', 'home_sleep_page:isConflictSafe:REJECTED_AGE', 'Conflict rejected due to age', {'ageMinutes': ageOfOldest.inMinutes});
+      // #endregion
+      return false;
+    }
+    
+    // #region agent log H2/H3
+    _debugLog('H2', 'home_sleep_page:isConflictSafe:SAFE', 'Conflict IS safe to auto-resolve', {'spreadSeconds': timestampSpread.inSeconds, 'ageMinutes': ageOfOldest.inMinutes});
+    // #endregion
+    debugPrint('[DEBUG-FIX2] Conflict IS safe: spread=${timestampSpread.inSeconds}s, age=${ageOfOldest.inMinutes}min');
+    return true;
+  }
+  
+  /// Shows a warning snackbar for conflicts that are NOT safe to auto-resolve.
+  void _showConflictWarningSnackbar(DuplicateStartConflict conflict) {
+    // #region agent log H1
+    _debugLog('H1', 'home_sleep_page:showConflictWarning', 'Showing conflict warning snackbar', {'conflictEventsCount': conflict.events.length});
+    // #endregion
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange.shade200, size: 20),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Conflito detetado. Sincroniza novamente para convergir.',
+                style: TextStyle(fontSize: 13),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.orange.shade800,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 5),
+        action: SnackBarAction(
+          label: 'Sync',
+          textColor: Colors.white,
+          onPressed: () {
+            // #region agent log H1
+            _debugLog('H1', 'home_sleep_page:syncButtonPressed', 'Sync button pressed in snackbar', {});
+            // #endregion
+            final baby = ref.read(activeBabyProvider);
+            // #region agent log H1
+            _debugLog('H1', 'home_sleep_page:syncButtonBaby', 'Baby for sync', {'babyId': baby?.id ?? 'null', 'babyName': baby?.name ?? 'null'});
+            // #endregion
+            if (baby != null) {
+              // #region agent log H1
+              _debugLog('H1', 'home_sleep_page:callingSyncNow', 'Calling syncNowForBaby', {'babyId': baby.id});
+              // #endregion
+              ref.read(syncProvider.notifier).syncNowForBaby(baby.id);
+            } else {
+              // #region agent log H1
+              _debugLog('H1', 'home_sleep_page:syncButtonBabyNull', 'Baby is null, NOT calling sync', {});
+              // #endregion
+            }
+          },
+        ),
+      ),
+    );
+  }
+  
+  /// Automatically resolves a SAFE conflict and shows informative snackbar
   Future<void> _autoResolveConflict(DuplicateStartConflict conflict, SleepEvent keepEvent) async {
     try {
       await ref.read(sleepEventsNotifierProvider.notifier).resolveDuplicateConflict(
@@ -177,9 +261,6 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       // Don't show error - will retry on next check
     }
   }
-
-  // Note: _showDuplicateConflictSnackBar and _showDuplicateConflictModal removed
-  // Conflicts are now resolved automatically via _autoResolveConflict
 
   @override
   Widget build(BuildContext context) {
@@ -881,6 +962,9 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     debugPrint('[DEBUG-H1] UI _overwriteSessionsAndCreateStart ENTRY');
     debugPrint('[DEBUG-H1]   overlappingSessions: ${overlappingSessions.length}');
     debugPrint('[DEBUG-H1]   newStartTime: $newStartTime');
+    final now = DateTime.now();
+    final diffMin = now.difference(newStartTime).inMinutes;
+    _debugLog('H10', 'home_sleep_page:overwriteAndCreateStart:entry', 'UI calling overwrite', {'newStartTime': newStartTime.toIso8601String(), 'newStartTimeUtc': newStartTime.toUtc().toIso8601String(), 'now': now.toIso8601String(), 'diffMinutes': diffMin, 'diffHours': diffMin ~/ 60, 'overlappingSessions': overlappingSessions.length});
     // #endregion
     
     setState(() => _isActionLoading = true);
@@ -973,6 +1057,10 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     }
     if (!mounted) return;
     
+    // #region agent log H7
+    _debugLog('H7', 'home_sleep_page:handleCustomTime:timePicked', 'User picked time', {'hour': time.hour, 'minute': time.minute, 'nowHour': DateTime.now().hour, 'nowMinute': DateTime.now().minute});
+    // #endregion
+    
     // Passo 2: Escolher dia (Hoje/Ontem/Outro dia) com regras anti-futuro
     final selectedDateTime = await _showSmartDayPicker(time);
     if (selectedDateTime == null) {
@@ -980,6 +1068,12 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       return;
     }
     if (!mounted) return;
+    
+    // #region agent log H7
+    final now = DateTime.now();
+    final diffMinutes = now.difference(selectedDateTime).inMinutes;
+    _debugLog('H7', 'home_sleep_page:handleCustomTime:dateSelected', 'Selected DateTime calculated', {'selectedDateTime': selectedDateTime.toIso8601String(), 'selectedDateTimeLocal': selectedDateTime.toLocal().toIso8601String(), 'now': now.toIso8601String(), 'diffMinutes': diffMinutes, 'diffHours': diffMinutes ~/ 60});
+    // #endregion
     
     debugPrint('[HomeSleep] Selected DateTime: $selectedDateTime');
     
@@ -992,6 +1086,10 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     if (!mounted) return;
     
     debugPrint('[HomeSleep] Intent selected: $intent');
+    
+    // #region agent log H7
+    _debugLog('H7', 'home_sleep_page:handleCustomTime:intentChosen', 'User chose intent', {'intent': intent, 'selectedDateTime': selectedDateTime.toIso8601String()});
+    // #endregion
     
     if (intent == 'still_sleeping') {
       // Opção A: criar apenas SleepStart
@@ -1205,6 +1303,10 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       time.minute,
     );
     
+    // #region agent log H8
+    _debugLog('H8', 'home_sleep_page:showSmartDayPicker:result', 'Final DateTime calculated', {'selectedDate': selectedDate.toIso8601String(), 'time': '${time.hour}:${time.minute}', 'result': result.toIso8601String(), 'resultLocal': result.toLocal().toIso8601String(), 'choice': choice});
+    // #endregion
+    
     // Final validation: never allow future
     if (result.isAfter(now)) {
       if (mounted) {
@@ -1289,6 +1391,10 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
 
   /// Helper para criar SleepStart com feedback
   Future<void> _createStartEvent(DateTime startTime) async {
+    // #region agent log H9
+    final now = DateTime.now();
+    _debugLog('H9', 'home_sleep_page:createStartEvent:entry', 'Creating SleepStart', {'startTime': startTime.toIso8601String(), 'startTimeUtc': startTime.toUtc().toIso8601String(), 'now': now.toIso8601String(), 'diffMinutes': now.difference(startTime).inMinutes, 'diffHours': now.difference(startTime).inMinutes ~/ 60});
+    // #endregion
     debugPrint('[HomeSleep] Creating SleepStart at: $startTime (UTC: ${startTime.toUtc()})');
     setState(() => _isActionLoading = true);
     try {
@@ -1299,9 +1405,15 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       // Note: addEvent() already updates state - no refresh() needed
     } on OverlapException catch (e) {
       debugPrint('[HomeSleep] CreateStartEvent overlap: ${e.overlappingSessions.length} sessions');
+      // #region agent log H9
+      _debugLog('H9', 'home_sleep_page:createStartEvent:overlap', 'Overlap detected, showing modal', {'overlappingSessions': e.overlappingSessions.length, 'startTime': startTime.toIso8601String()});
+      // #endregion
       if (mounted) {
         final shouldReplace = await _showOverlapModal(e.overlappingSessions, e.message);
         if (shouldReplace == true && mounted) {
+          // #region agent log H9
+          _debugLog('H9', 'home_sleep_page:createStartEvent:overwrite', 'User chose to overwrite', {'startTime': startTime.toIso8601String()});
+          // #endregion
           await _overwriteSessionsAndCreateStart(
             overlappingSessions: e.overlappingSessions,
             newStartTime: startTime,

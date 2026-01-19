@@ -65,6 +65,16 @@ bool _isCorrectedByFkFailure(Failure failure) {
       (msg.contains('foreign key') && msg.contains('corrected_by'));
 }
 
+/// Detects caregiver FK failures that can be recovered by canonicalization
+bool _isCaregiverFkFailure(Failure failure) {
+  final msg = failure.message.toLowerCase();
+  return msg.contains('caregiver_id_fkey') ||
+      msg.contains('caregiver does not exist') ||
+      msg.contains('caregiver not found') ||
+      (msg.contains('foreign key') && msg.contains('caregiver_id')) ||
+      (msg.contains('caregiver') && msg.contains('does not belong'));
+}
+
 /// Layered Sync Orchestrator
 /// 
 /// Implements the correct sync order to respect backend FK constraints:
@@ -300,11 +310,8 @@ class LayeredSyncOrchestrator {
     if (isSyncedResult.isError) {
       return Error(isSyncedResult.failureOrNull!);
     }
-    if (isSyncedResult.dataOrNull == true) {
-      return const Success(false); // Already synced
-    }
-
-    // Get baby
+    
+    // Get baby (needed for both paths)
     final babyResult = await _babyLocalDataSource.getBabyById(babyId);
     if (babyResult.isError) {
       return Error(babyResult.failureOrNull!);
@@ -312,6 +319,17 @@ class LayeredSyncOrchestrator {
     final baby = babyResult.dataOrNull;
     if (baby == null) {
       return Error(StorageFailure('Baby not found locally: $babyId'));
+    }
+    
+    final now = DateTime.now().toUtc();
+    
+    if (isSyncedResult.dataOrNull == true) {
+      // FIX: Even when baby is already synced, run canonicalization
+      // This ensures older babies (created before this logic) get their caregivers aligned
+      // ignore: avoid_print
+      print('[LayeredSync] Baby $babyId already synced - running canonicalization anyway');
+      await _syncCaregiverAfterBabyPush(babyId, baby.createdBy, now);
+      return const Success(false); // Baby was already synced
     }
 
     // Push to remote
@@ -321,7 +339,6 @@ class LayeredSyncOrchestrator {
     }
 
     // Mark synced
-    final now = DateTime.now().toUtc();
     await _babyLocalDataSource.markBabySynced(babyId, now);
     // ignore: avoid_print
     print('[LayeredSync] Pushed baby: $babyId');
@@ -499,8 +516,18 @@ class LayeredSyncOrchestrator {
     );
     // #endregion
 
+    // FIX: Sort events to push those WITHOUT corrected_by first
+    // This ensures correction events (corrected_by=NULL) are inserted before
+    // we try to push updates to original events (which have corrected_by=<correctionId>)
+    final sortedEvents = List.of(unsyncedEvents)
+      ..sort((a, b) {
+        final aHasCorrectedBy = a.correctedBy != null ? 1 : 0;
+        final bHasCorrectedBy = b.correctedBy != null ? 1 : 0;
+        return aHasCorrectedBy.compareTo(bHasCorrectedBy);
+      });
+
     // Retry loop to naturally satisfy corrected_by FK dependencies.
-    var pending = List.of(unsyncedEvents);
+    var pending = sortedEvents;
     for (var pass = 1; pass <= 3 && pending.isNotEmpty; pass++) {
       var progressed = false;
       final nextPending = <dynamic>[];
@@ -559,6 +586,30 @@ class LayeredSyncOrchestrator {
           nextPending.add(event);
           continue;
         }
+        
+        // FIX: Recovery for caregiver FK failures - run canonicalization and retry
+        if (_isCaregiverFkFailure(failure) && pass < 3) {
+          // ignore: avoid_print
+          print('[LayeredSync] Caregiver FK failure for event ${event.id} - attempting canonicalization recovery');
+          
+          final babyResult = await _babyLocalDataSource.getBabyById(event.babyId);
+          if (babyResult.isSuccess && babyResult.dataOrNull != null) {
+            final baby = babyResult.dataOrNull!;
+            final now = DateTime.now().toUtc();
+            await _syncCaregiverAfterBabyPush(event.babyId, baby.createdBy, now);
+            nextPending.add(event);
+            // ignore: avoid_print
+            print('[LayeredSync] Canonicalization complete - event ${event.id} re-queued for retry');
+          } else {
+            await _eventLocalDataSource.markEventSyncError(
+              event.id,
+              'caregiver_fk_unrecoverable',
+              'Caregiver FK failure and could not load baby: ${failure.message}',
+            );
+            errorCount++;
+          }
+          continue;
+        }
 
         await _eventLocalDataSource.markEventSyncError(
           event.id,
@@ -613,7 +664,18 @@ class LayeredSyncOrchestrator {
     );
     // #endregion
 
-    var pending = List.of(unsyncedEvents);
+    // FIX: Sort events to push those WITHOUT corrected_by first
+    // This ensures correction events (corrected_by=NULL) are inserted before
+    // we try to push updates to original events (which have corrected_by=<correctionId>)
+    final sortedEvents = List.of(unsyncedEvents)
+      ..sort((a, b) {
+        // Events without corrected_by come first
+        final aHasCorrectedBy = a.correctedBy != null ? 1 : 0;
+        final bHasCorrectedBy = b.correctedBy != null ? 1 : 0;
+        return aHasCorrectedBy.compareTo(bHasCorrectedBy);
+      });
+    
+    var pending = sortedEvents;
     for (var pass = 1; pass <= 3 && pending.isNotEmpty; pass++) {
       var progressed = false;
       final nextPending = <dynamic>[];
@@ -669,6 +731,36 @@ class LayeredSyncOrchestrator {
           );
           // #endregion
           nextPending.add(event);
+          continue;
+        }
+        
+        // FIX: Recovery for caregiver FK failures - run canonicalization and retry
+        if (_isCaregiverFkFailure(failure) && pass < 3) {
+          // ignore: avoid_print
+          print('[LayeredSync] Caregiver FK failure for event ${event.id} - attempting canonicalization recovery');
+          
+          // Get baby info for canonicalization
+          final babyResult = await _babyLocalDataSource.getBabyById(event.babyId);
+          if (babyResult.isSuccess && babyResult.dataOrNull != null) {
+            final baby = babyResult.dataOrNull!;
+            final now = DateTime.now().toUtc();
+            
+            // Run canonicalization
+            await _syncCaregiverAfterBabyPush(event.babyId, baby.createdBy, now);
+            
+            // Re-queue this event for retry
+            nextPending.add(event);
+            // ignore: avoid_print
+            print('[LayeredSync] Canonicalization complete - event ${event.id} re-queued for retry');
+          } else {
+            // Can't recover - mark as error
+            await _eventLocalDataSource.markEventSyncError(
+              event.id,
+              'caregiver_fk_unrecoverable',
+              'Caregiver FK failure and could not load baby for canonicalization: ${failure.message}',
+            );
+            errorCount++;
+          }
           continue;
         }
 

@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:temp_flutter/core/types/result.dart';
 import 'package:temp_flutter/domain/entities/sleep_event.dart';
@@ -19,6 +21,29 @@ import 'auth_provider.dart';
 import 'sync_provider.dart';
 
 part 'sleep_events_provider.g.dart';
+
+// #region agent log helper
+void _providerDebugLog(String hypothesisId, String location, String message, Map<String, dynamic> data) {
+  try {
+    final logEntry = jsonEncode({
+      'sessionId': 'debug-session',
+      'runId': 'post-fix-1',
+      'hypothesisId': hypothesisId,
+      'location': location,
+      'message': message,
+      'data': data,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    });
+    // Try to write to log file
+    final file = File('/Users/isacsa/baby_sleep_monitor/baby-sleep/.cursor/debug.log');
+    file.writeAsStringSync('$logEntry\n', mode: FileMode.append, flush: true);
+  } catch (_) {
+    // Fallback to print
+    // ignore: avoid_print
+    print('[DEBUG-$hypothesisId] $location: $message | $data');
+  }
+}
+// #endregion
 
 /// Sleep events provider
 /// 
@@ -664,6 +689,9 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     // #region agent log H1 - Entry point
     // ignore: avoid_print
     print('[DEBUG-H1] overwriteAndCreateStart ENTRY: sessions=${overlappingSessions.length}, newStartTime=$newStartTime');
+    final entryNow = DateTime.now();
+    final diffMin = entryNow.difference(newStartTime).inMinutes;
+    _providerDebugLog('H10', 'sleep_events_provider:overwriteAndCreateStart:entry', 'Provider received newStartTime', {'newStartTime': newStartTime.toIso8601String(), 'newStartTimeUtc': newStartTime.toUtc().toIso8601String(), 'now': entryNow.toIso8601String(), 'diffMinutes': diffMin, 'diffHours': diffMin ~/ 60, 'overlappingSessions': overlappingSessions.length});
     // #endregion
     
     final user = ref.read(authProvider);
@@ -733,6 +761,8 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
       )));
       
       // Create correction event for start (as domain then convert)
+      // FIX: correction events have corrected_by=NULL to avoid FK dependencies in push
+      // The reference to the original is stored in metadata.corrects_event_id
       final startCorrectionEvent = SleepEvent(
         id: startCorrectionId,
         babyId: activeBaby.id,
@@ -743,8 +773,11 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
         createdAt: now,
         isCorrected: true,
         syncedAt: null,
-        correctedBy: session.startEvent.id,
-        metadata: {'correction_reason': 'replaced_by_user'},
+        correctedBy: null, // No FK dependency - original points to us, not vice versa
+        metadata: {
+          'correction_reason': 'replaced_by_user',
+          'corrects_event_id': session.startEvent.id,
+        },
       );
       inserts.add(SleepEventModel.fromDomain(startCorrectionEvent));
       
@@ -756,6 +789,7 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
           correctionEventId: endCorrectionId,
         )));
         
+        // FIX: correction events have corrected_by=NULL to avoid FK dependencies
         final endCorrectionEvent = SleepEvent(
           id: endCorrectionId,
           babyId: activeBaby.id,
@@ -766,8 +800,11 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
           createdAt: now,
           isCorrected: true,
           syncedAt: null,
-          correctedBy: session.endEvent!.id,
-          metadata: {'correction_reason': 'replaced_by_user'},
+          correctedBy: null, // No FK dependency
+          metadata: {
+            'correction_reason': 'replaced_by_user',
+            'corrects_event_id': session.endEvent!.id,
+          },
         );
         inserts.add(SleepEventModel.fromDomain(endCorrectionEvent));
       }
@@ -782,6 +819,7 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
       )));
       
       // Create correction event for the orphan
+      // FIX: correction events have corrected_by=NULL to avoid FK dependencies
       final orphanCorrectionEvent = SleepEvent(
         id: correctionId,
         babyId: activeBaby.id,
@@ -792,8 +830,11 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
         createdAt: now,
         isCorrected: true,
         syncedAt: null,
-        correctedBy: orphan.id,
-        metadata: {'correction_reason': 'orphan_in_overwrite_interval'},
+        correctedBy: null, // No FK dependency
+        metadata: {
+          'correction_reason': 'orphan_in_overwrite_interval',
+          'corrects_event_id': orphan.id,
+        },
       );
       inserts.add(SleepEventModel.fromDomain(orphanCorrectionEvent));
       // ignore: avoid_print
@@ -849,6 +890,10 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
         // #region agent log H1 - Post-transaction
         // ignore: avoid_print
         print('[DEBUG-H1] Transaction SUCCESS - new SleepStart id=${newStartResult.dataOrNull!.id}');
+        final createdEvent = newStartResult.dataOrNull!;
+        final nowPost = DateTime.now();
+        final diffMinPost = nowPost.difference(createdEvent.timestamp).inMinutes;
+        _providerDebugLog('H10', 'sleep_events_provider:overwriteAndCreateStart:postTransaction', 'New SleepStart event created', {'eventId': createdEvent.id, 'timestamp': createdEvent.timestamp.toIso8601String(), 'createdAt': createdEvent.createdAt.toIso8601String(), 'now': nowPost.toIso8601String(), 'diffMinutes': diffMinPost, 'diffHours': diffMinPost ~/ 60});
         // #endregion
       case Error(:final failure):
         // ignore: avoid_print
@@ -952,6 +997,7 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
         correctionEventId: startCorrectionId,
       )));
       
+      // FIX: correction events have corrected_by=NULL to avoid FK dependencies
       final startCorrectionEvent = SleepEvent(
         id: startCorrectionId,
         babyId: activeBaby.id,
@@ -962,8 +1008,11 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
         createdAt: now,
         isCorrected: true,
         syncedAt: null,
-        correctedBy: session.startEvent.id,
-        metadata: {'correction_reason': 'replaced_by_user'},
+        correctedBy: null, // No FK dependency
+        metadata: {
+          'correction_reason': 'replaced_by_user',
+          'corrects_event_id': session.startEvent.id,
+        },
       );
       inserts.add(SleepEventModel.fromDomain(startCorrectionEvent));
       
@@ -974,6 +1023,7 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
           correctionEventId: endCorrectionId,
         )));
         
+        // FIX: correction events have corrected_by=NULL to avoid FK dependencies
         final endCorrectionEvent = SleepEvent(
           id: endCorrectionId,
           babyId: activeBaby.id,
@@ -984,8 +1034,11 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
           createdAt: now,
           isCorrected: true,
           syncedAt: null,
-          correctedBy: session.endEvent!.id,
-          metadata: {'correction_reason': 'replaced_by_user'},
+          correctedBy: null, // No FK dependency
+          metadata: {
+            'correction_reason': 'replaced_by_user',
+            'corrects_event_id': session.endEvent!.id,
+          },
         );
         inserts.add(SleepEventModel.fromDomain(endCorrectionEvent));
       }
@@ -999,6 +1052,7 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
         correctionEventId: correctionId,
       )));
       
+      // FIX: correction events have corrected_by=NULL to avoid FK dependencies
       final orphanCorrectionEvent = SleepEvent(
         id: correctionId,
         babyId: activeBaby.id,
@@ -1009,8 +1063,11 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
         createdAt: now,
         isCorrected: true,
         syncedAt: null,
-        correctedBy: orphan.id,
-        metadata: {'correction_reason': 'orphan_in_overwrite_interval'},
+        correctedBy: null, // No FK dependency
+        metadata: {
+          'correction_reason': 'orphan_in_overwrite_interval',
+          'corrects_event_id': orphan.id,
+        },
       );
       inserts.add(SleepEventModel.fromDomain(orphanCorrectionEvent));
       // ignore: avoid_print
@@ -1073,6 +1130,214 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     
     // FIX P4: Trigger auto-sync after transaction
     ref.read(syncProvider.notifier).scheduleSyncAfterLocalChange(activeBaby.id);
+  }
+
+  // ========== DELETE SESSION (as correction) ==========
+
+  /// Deletes a complete sleep session by marking both events as corrected.
+  /// 
+  /// This is NOT a hard delete - it follows the event-based correction model:
+  /// 1. Marks startEvent and endEvent as isCorrected=true
+  /// 2. Creates correction events with metadata: correction_reason='deleted_by_user'
+  /// 3. Persists atomically via transaction
+  /// 
+  /// The session will no longer appear in derived sessions (SleepSession.fromEventList)
+  /// but is kept for audit/sync purposes.
+  /// 
+  /// Throws [SleepEventException] if deletion fails.
+  Future<void> deleteSleepSession({required SleepSession session}) async {
+    // ignore: avoid_print
+    print('[SleepEventsProvider] deleteSleepSession: startId=${session.startEvent.id}, endId=${session.endEvent?.id}');
+    
+    if (!session.isComplete) {
+      throw const SleepEventException('Apenas sessões completas podem ser eliminadas');
+    }
+    
+    final user = ref.read(authProvider);
+    final activeBaby = ref.read(activeBabyProvider);
+    
+    if (user == null) {
+      throw const SleepEventException('Utilizador não autenticado');
+    }
+    
+    if (activeBaby == null) {
+      throw const SleepEventException('Nenhum bebé selecionado');
+    }
+
+    final now = DateTime.now().toUtc();
+    final deviceId = await DeviceIdManager.getDeviceId();
+    
+    final inserts = <SleepEventModel>[];
+    final updates = <SleepEventModel>[];
+    
+    // Mark start event as corrected and create correction event
+    final startCorrectionId = UuidGenerator.generate();
+    updates.add(SleepEventModel.fromDomain(_markOriginalCorrectedForLocal(
+      original: session.startEvent,
+      correctionEventId: startCorrectionId,
+    )));
+    
+    final startCorrectionEvent = SleepEvent(
+      id: startCorrectionId,
+      babyId: activeBaby.id,
+      type: SleepEventType.sleepStart,
+      timestamp: session.startEvent.timestamp,
+      caregiverId: session.startEvent.caregiverId,
+      deviceId: deviceId,
+      createdAt: now,
+      isCorrected: true,
+      syncedAt: null,
+      correctedBy: null, // No FK dependency
+      metadata: {
+        'correction_reason': 'deleted_by_user',
+        'corrects_event_id': session.startEvent.id,
+      },
+    );
+    inserts.add(SleepEventModel.fromDomain(startCorrectionEvent));
+    
+    // Mark end event as corrected and create correction event
+    final endCorrectionId = UuidGenerator.generate();
+    updates.add(SleepEventModel.fromDomain(_markOriginalCorrectedForLocal(
+      original: session.endEvent!,
+      correctionEventId: endCorrectionId,
+    )));
+    
+    final endCorrectionEvent = SleepEvent(
+      id: endCorrectionId,
+      babyId: activeBaby.id,
+      type: SleepEventType.sleepEnd,
+      timestamp: session.endEvent!.timestamp,
+      caregiverId: session.endEvent!.caregiverId,
+      deviceId: deviceId,
+      createdAt: now,
+      isCorrected: true,
+      syncedAt: null,
+      correctedBy: null, // No FK dependency
+      metadata: {
+        'correction_reason': 'deleted_by_user',
+        'corrects_event_id': session.endEvent!.id,
+      },
+    );
+    inserts.add(SleepEventModel.fromDomain(endCorrectionEvent));
+    
+    // Execute atomically
+    // ignore: avoid_print
+    print('[SleepEventsProvider] deleteSleepSession: committing ${inserts.length} inserts, ${updates.length} updates');
+    
+    final saveResult = await _localDataSource.saveAndUpdateEventsInTransaction(
+      inserts: inserts,
+      updates: updates,
+    );
+    
+    switch (saveResult) {
+      case Success():
+        // ignore: avoid_print
+        print('[SleepEventsProvider] deleteSleepSession: transaction committed');
+      case Error(:final failure):
+        throw SleepEventException(failure.message);
+    }
+    
+    await refresh();
+    
+    // Trigger auto-sync after deletion
+    ref.read(syncProvider.notifier).scheduleSyncAfterLocalChange(activeBaby.id);
+  }
+
+  // ========== EDIT SESSION ==========
+
+  /// Edits a complete sleep session by correcting the original and creating new events.
+  /// 
+  /// Algorithm:
+  /// 1. Validate new times (end > start in local and UTC)
+  /// 2. Check for overlaps with OTHER sessions (excluding the original)
+  /// 3. If overlaps exist and extraSessionsToOverwrite is empty, throw OverlapException
+  /// 4. Otherwise, correct original + any extra sessions, and create new session
+  /// 
+  /// [original] - The session being edited
+  /// [newStartTime] - New start time (local or UTC)
+  /// [newEndTime] - New end time (local or UTC)
+  /// [extraSessionsToOverwrite] - Additional sessions to overwrite if user confirmed
+  /// 
+  /// Throws [SleepEventException] for validation errors.
+  /// Throws [OverlapException] if overlapping sessions exist and not confirmed.
+  Future<void> editSleepSession({
+    required SleepSession original,
+    required DateTime newStartTime,
+    required DateTime newEndTime,
+    List<SleepSession> extraSessionsToOverwrite = const [],
+  }) async {
+    // ignore: avoid_print
+    print('[SleepEventsProvider] editSleepSession: original.start=${original.startEvent.id}, newStart=$newStartTime, newEnd=$newEndTime');
+    
+    if (!original.isComplete) {
+      throw const SleepEventException('Apenas sessões completas podem ser editadas');
+    }
+    
+    // Normalize to UTC
+    final startUtc = newStartTime.toUtc();
+    final endUtc = newEndTime.toUtc();
+    
+    // Validate order in both local AND UTC
+    if (!newEndTime.isAfter(newStartTime)) {
+      throw const SleepEventException('A hora de fim deve ser depois da hora de início');
+    }
+    
+    if (!endUtc.isAfter(startUtc)) {
+      throw const SleepEventException('As horas ficaram inconsistentes. Confirma o dia do fim.');
+    }
+
+    final user = ref.read(authProvider);
+    final activeBaby = ref.read(activeBabyProvider);
+    
+    if (user == null) {
+      throw const SleepEventException('Utilizador não autenticado');
+    }
+    
+    if (activeBaby == null) {
+      throw const SleepEventException('Nenhum bebé selecionado');
+    }
+
+    // Load events and check for overlaps with OTHER sessions
+    List<SleepEvent> eventsToCheck = state.value ?? [];
+    if (eventsToCheck.isEmpty) {
+      try {
+        eventsToCheck = await _loadEvents(activeBaby.id);
+      } catch (e) {
+        // ignore: avoid_print
+        print('[SleepEventsProvider] editSleepSession: failed to load events: $e');
+      }
+    }
+    
+    // Filter out the original session's events for overlap check
+    final originalEventIds = {original.startEvent.id, original.endEvent!.id};
+    final eventsFiltered = eventsToCheck.where((e) => !originalEventIds.contains(e.id)).toList();
+    
+    final overlappingSessions = _findOverlappingSessions(
+      startUtc: startUtc,
+      endUtc: endUtc,
+      events: eventsFiltered,
+    );
+    
+    if (overlappingSessions.isNotEmpty && extraSessionsToOverwrite.isEmpty) {
+      // User hasn't confirmed to overwrite - throw exception with overlapping sessions
+      final sessionStr = overlappingSessions.map(_formatSleepSession).join(', ');
+      // ignore: avoid_print
+      print('[SleepEventsProvider] editSleepSession: overlap detected: $sessionStr');
+      throw OverlapException(
+        message: 'Já existe sono registado nesse período ($sessionStr)',
+        overlappingSessions: overlappingSessions,
+      );
+    }
+    
+    // Combine original session with any extra sessions to overwrite
+    final allSessionsToOverwrite = [original, ...extraSessionsToOverwrite];
+    
+    // Use overwriteAndCreateSession which handles all the correction logic
+    await overwriteAndCreateSession(
+      overlappingSessions: allSessionsToOverwrite,
+      newStartTime: newStartTime,
+      newEndTime: newEndTime,
+    );
   }
 
   // ========== MULTI-DEVICE CONFLICT DETECTION AND RESOLUTION ==========
