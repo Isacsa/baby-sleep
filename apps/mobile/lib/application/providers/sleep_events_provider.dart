@@ -164,24 +164,9 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
   Future<void> refresh() async {
     final activeBaby = ref.read(activeBabyProvider);
     
-    void dbg(String msg) {
-      assert(() {
-        // ignore: avoid_print
-        print(msg);
-        return true;
-      }());
-    }
-    // === DEBUG LOG H3: Refresh sequence tracking ===
-    dbg('[SleepEventsProvider][H3-DEBUG] ===== REFRESH CALLED =====');
-    dbg('[SleepEventsProvider][H3-DEBUG] activeBaby: ${activeBaby?.id ?? 'null'}');
-    dbg('[SleepEventsProvider][H3-DEBUG] currentBabyId: $_currentBabyId');
-    dbg('[SleepEventsProvider][H3-DEBUG] currentSeq: $_refreshSeq');
-    dbg('[SleepEventsProvider][H3-DEBUG] stateBeforeCount: ${state.value?.length ?? 'null (loading/error)'}');
-    
     if (activeBaby == null) {
       state = const AsyncData([]);
       _currentBabyId = null;
-      dbg('[SleepEventsProvider][H3-DEBUG] No active baby, reset to empty');
       return;
     }
     
@@ -192,8 +177,6 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     final isSameBaby = _currentBabyId == activeBaby.id;
     _currentBabyId = activeBaby.id;
     
-    dbg('[SleepEventsProvider][H3-DEBUG] isSameBaby: $isSameBaby, mySeq: $mySeq');
-    
     if (isSameBaby) {
       // Same baby: preserve previous data during loading (no flicker)
       state = const AsyncLoading<List<SleepEvent>>().copyWithPrevious(state);
@@ -203,19 +186,12 @@ class SleepEventsNotifier extends _$SleepEventsNotifier {
     }
     
     final result = await AsyncValue.guard(() => _loadEvents(activeBaby.id));
-
     
     // Only apply result if we're still the most recent refresh
     // (addEvent or another refresh may have updated state since we started)
     if (_refreshSeq == mySeq) {
       state = result;
-      dbg('[SleepEventsProvider][H3-DEBUG] Applied result: ${result.value?.length ?? 'error/loading'} events');
-    } else {
-      dbg('[SleepEventsProvider][H3-DEBUG] STALE refresh (mySeq=$mySeq, current=$_refreshSeq) - result DISCARDED');
     }
-    
-    dbg('[SleepEventsProvider][H3-DEBUG] stateAfterCount: ${state.value?.length ?? 'null'}');
-    dbg('[SleepEventsProvider][H3-DEBUG] ===== REFRESH END =====');
   }
 
   /// Adds a new event (after local persistence)

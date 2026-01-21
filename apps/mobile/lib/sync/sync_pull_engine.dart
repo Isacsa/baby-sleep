@@ -81,6 +81,40 @@ class SyncPullEngine {
     return Success(_currentState);
   }
 
+  /// Pulls new remote events for a specific baby (returns PullResult)
+  /// 
+  /// Same as [pullForBaby] but returns [PullResult] with `eventsReceived` count,
+  /// allowing callers to skip UI refreshes when no new events arrived.
+  /// 
+  /// [babyId] - Baby ID to pull events for
+  /// 
+  /// Returns pull result with eventsReceived and newLastSyncedAt
+  Future<Result<PullResult, Failure>> pullForBabyWithResult(String babyId) async {
+    // Update state to syncing
+    _updateState(SyncState.syncing(pendingEventsCount: 0));
+
+    // Execute pull
+    final pullResult = await _pullStrategy.pullEventsForBaby(babyId);
+
+    if (pullResult.isError) {
+      final errorState = SyncState.error(
+        errorMessage: pullResult.failureOrNull!.message,
+        lastSyncedAt: _currentState.lastSyncedAt,
+      );
+      _updateState(errorState);
+      return Error(pullResult.failureOrNull!);
+    }
+
+    final result = pullResult.dataOrNull!;
+    
+    // Success
+    _updateState(SyncState.success(
+      lastSyncedAt: result.newLastSyncedAt ?? DateTime.now().toUtc(),
+    ));
+
+    return Success(result);
+  }
+
   /// Pulls events for all accessible babies
   /// 
   /// Fetches baby list from local storage

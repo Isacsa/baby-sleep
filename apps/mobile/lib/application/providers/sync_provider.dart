@@ -82,6 +82,11 @@ class Sync extends _$Sync {
   /// 
   /// Does not set state to "syncing" to avoid UI spinner disruption.
   /// Errors are logged but not surfaced (will retry on next action).
+  /// 
+  /// OPTIMIZATION: Only refreshes providers when there are actual changes:
+  /// - Full invalidation only if babies/caregivers were pushed (canonicalization safety)
+  /// - Events-only refresh if only events changed
+  /// - No refresh if pull returned zero events
   Future<void> _syncInBackground(String babyId) async {
     if (_autoSyncInProgress) {
       // ignore: avoid_print
@@ -116,8 +121,8 @@ class Sync extends _$Sync {
           '${pushData.caregiversPushed} caregivers, '
           '${pushData.eventsPushed} events');
       
-      // Pull remote updates
-      final pullResult = await _pull.pullForBaby(babyId);
+      // Pull remote updates (with result to check eventsReceived)
+      final pullResult = await _pull.pullForBabyWithResult(babyId);
       
       if (pullResult.isError) {
         // ignore: avoid_print
@@ -125,11 +130,21 @@ class Sync extends _$Sync {
         return;
       }
       
-      // Invalidate caches to refresh UI with new data
-      _invalidateAfterSync();
+      final pullData = pullResult.dataOrNull!;
+      
+      // OPTIMIZATION: Conditional refresh based on what changed
+      // If babies or caregivers were pushed, do full invalidation (canonicalization safety)
+      // Otherwise, only refresh events if pull received new ones
+      if (pushData.babiesPushed > 0 || pushData.caregiversPushed > 0) {
+        _invalidateAfterSync();
+      } else if (pullData.eventsReceived > 0) {
+        // Only refresh sleep events (lightweight, no caregivers/context invalidation)
+        ref.read(sleepEventsNotifierProvider.notifier).refresh();
+      }
+      // else: no changes, skip all refreshes (zero jank)
       
       // ignore: avoid_print
-      print('[SyncProvider] Auto-sync COMPLETE: babyId=$babyId');
+      print('[SyncProvider] Auto-sync COMPLETE: babyId=$babyId (pulled ${pullData.eventsReceived} events)');
     } catch (e) {
       // ignore: avoid_print
       print('[SyncProvider] Auto-sync ERROR: $e');
@@ -233,6 +248,9 @@ class Sync extends _$Sync {
   /// - Auto-sync em progresso
   /// - Outro auto-pull em progresso
   /// - Sync manual em progresso
+  /// 
+  /// OPTIMIZATION: Only refreshes sleepEventsNotifierProvider when new events
+  /// arrive; skips all refreshes when eventsReceived == 0 (zero jank).
   Future<void> _pullInBackground(String babyId) async {
     // Gating: não correr se outra operação está em progresso
     if (_autoPullInProgress) {
@@ -258,8 +276,8 @@ class Sync extends _$Sync {
     print('[SyncProvider] Auto-pull START: babyId=$babyId');
     
     try {
-      // Pull direto (não usa pullForBaby() para não alterar SyncState)
-      final result = await _pull.pullForBaby(babyId);
+      // Pull with result to check eventsReceived
+      final result = await _pull.pullForBabyWithResult(babyId);
       
       if (result.isError) {
         // Backoff: aumentar intervalo (máx 2min)
@@ -276,6 +294,8 @@ class Sync extends _$Sync {
         return;
       }
       
+      final pullData = result.dataOrNull!;
+      
       // Sucesso: reset backoff
       if (_autoPullCurrentInterval != _autoPullBaseInterval) {
         _autoPullCurrentInterval = _autoPullBaseInterval;
@@ -284,10 +304,15 @@ class Sync extends _$Sync {
         print('[SyncProvider] Auto-pull: backoff reset to ${_autoPullBaseInterval.inSeconds}s');
       }
       
-      // Invalidar caches para atualizar UI
-      _invalidateAfterSync();
+      // OPTIMIZATION: Only refresh if we actually received new events
+      // This avoids unnecessary rebuilds when there's nothing new
+      if (pullData.eventsReceived > 0) {
+        ref.read(sleepEventsNotifierProvider.notifier).refresh();
+      }
+      // else: no new events, skip refresh entirely (zero jank)
+      
       // ignore: avoid_print
-      print('[SyncProvider] Auto-pull SUCCESS: babyId=$babyId');
+      print('[SyncProvider] Auto-pull SUCCESS: babyId=$babyId (${pullData.eventsReceived} events)');
       
     } catch (e) {
       // ignore: avoid_print
@@ -768,33 +793,17 @@ class Sync extends _$Sync {
   /// - sleepStateNotifierProvider: NOT touched (auto-derives from sleepEvents)
   /// - caregiverContextProvider: invalidate
   void _invalidateAfterSync() {
-    void dbg(String msg) {
-      assert(() {
-        // ignore: avoid_print
-        print(msg);
-        return true;
-      }());
-    }
-    // === DEBUG LOG H3: Provider refresh ===
-    dbg('[SyncProvider][H3-DEBUG] ===== REFRESHING PROVIDERS =====');
-    dbg('[SyncProvider][H3-DEBUG] About to refresh: caregivers(inv), sleepEvents(refresh), caregiverContext(inv)');
-    
     ref.invalidate(caregiversNotifierProvider);
-    dbg('[SyncProvider][H3-DEBUG] Invalidated: caregiversNotifierProvider');
     
     // FIX UI FLICKER: Use refresh() instead of invalidate()
     // refresh() preserves previous state during loading (copyWithPrevious)
     // preventing UI from momentarily showing "Dormir agora" (isSleeping=false)
     ref.read(sleepEventsNotifierProvider.notifier).refresh();
-    dbg('[SyncProvider][H3-DEBUG] Called refresh() on sleepEventsNotifierProvider');
     
     // NOTE: sleepStateNotifierProvider auto-reacts to sleepEventsNotifierProvider
     // No need to invalidate it separately (and doing so would cause extra rebuilds)
     
     ref.invalidate(caregiverContextProvider);
-    dbg('[SyncProvider][H3-DEBUG] Invalidated: caregiverContextProvider');
-    
-    dbg('[SyncProvider][H3-DEBUG] ===== REFRESH COMPLETE =====');
   }
 
   // ========== PULL CAREGIVERS ONLY ==========

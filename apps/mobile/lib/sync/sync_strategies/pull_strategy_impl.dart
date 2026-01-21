@@ -60,13 +60,6 @@ class PullStrategyImpl {
   /// Continues on permanent errors (marks them)
   Future<Result<PullResult, Failure>> pullEventsForBaby(String babyId) async {
     final nowUtc = DateTime.now().toUtc();
-    void dbg(String msg) {
-      assert(() {
-        // ignore: avoid_print
-        print(msg);
-        return true;
-      }());
-    }
     
     // Get last synced timestamp
     final lastSyncedResult = await _localDataSource.getLastSyncedAt(babyId);
@@ -79,26 +72,14 @@ class PullStrategyImpl {
     final rawLastSyncedAt = lastSyncedResult.dataOrNull ?? 
         DateTime.fromMillisecondsSinceEpoch(0).toUtc();
     
-    // === DEBUG LOG H1: Pull cursor info ===
-    dbg('[PullStrategy][H1-DEBUG] ===== PULL START =====');
-    dbg('[PullStrategy][H1-DEBUG] babyId: $babyId');
-    dbg('[PullStrategy][H1-DEBUG] nowUtc: ${nowUtc.toIso8601String()}');
-    dbg('[PullStrategy][H1-DEBUG] rawLastSyncedAt: ${rawLastSyncedAt.toIso8601String()}');
-    
     // === CLOCK SKEW ROBUSTNESS ===
     // Step 1: Clamp lastSyncedAt to max(now) - prevent "future cursor" issues
     final isFutureCursor = rawLastSyncedAt.isAfter(nowUtc);
     final clampedLastSyncedAt = isFutureCursor ? nowUtc : rawLastSyncedAt;
     
-    if (isFutureCursor) {
-      dbg('[PullStrategy][H1-DEBUG] WARNING: lastSyncedAt was in FUTURE! Clamped to now.');
-    }
-    
     // Step 2: Apply safety buffer - re-fetch recent events to handle clock skew
     // This is safe because upsert is idempotent
     final lastSyncedAt = clampedLastSyncedAt.subtract(_clockSkewBuffer);
-    
-    dbg('[PullStrategy][H1-DEBUG] effectiveCursor (with ${_clockSkewBuffer.inMinutes}min buffer): ${lastSyncedAt.toIso8601String()}');
 
     // Fetch new events from remote
     final remoteResult = await _remoteDataSource.getNewRemoteEvents(
@@ -108,45 +89,21 @@ class PullStrategyImpl {
     );
 
     if (remoteResult.isError) {
-      dbg('[PullStrategy][H1-DEBUG] Remote fetch FAILED: ${remoteResult.failureOrNull?.message}');
       return Error(remoteResult.failureOrNull!);
     }
 
     final remoteEvents = remoteResult.dataOrNull ?? [];
     
-    // === DEBUG LOG H1: Events received ===
-    dbg('[PullStrategy][H1-DEBUG] eventsReceived: ${remoteEvents.length}');
-    
-    if (remoteEvents.isNotEmpty) {
-      // Log first and last few events for debugging
-      final eventsSorted = List.of(remoteEvents)
-        ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
-      
-      final firstEvent = eventsSorted.first;
-      final lastEvent = eventsSorted.last;
-      dbg('[PullStrategy][H1-DEBUG] min(created_at): ${firstEvent.createdAt}');
-      dbg('[PullStrategy][H1-DEBUG] max(created_at): ${lastEvent.createdAt}');
-      dbg('[PullStrategy][H1-DEBUG] First 3 events:');
-      for (var i = 0; i < 3 && i < eventsSorted.length; i++) {
-        final e = eventsSorted[i];
-        dbg('  [${e.id.substring(0, 8)}] ${e.type} ts=${e.timestamp} created=${e.createdAt}');
-      }
-    }
-    
     if (remoteEvents.isEmpty) {
       // No new events:
-      // Do NOT advance the cursor to local \"now\" because created_at is client-provided
+      // Do NOT advance the cursor to local "now" because created_at is client-provided
       // and local clocks may be ahead (clock skew). Advancing to a future cursor can
       // make us miss events created on other devices.
       //
       // Keep last_synced_at unchanged (or only clamp down if it's in the future relative to this device).
       if (rawLastSyncedAt.isAfter(nowUtc)) {
         await _localDataSource.setLastSyncedAt(babyId, nowUtc);
-        dbg('[PullStrategy][H1-DEBUG] No events + future cursor detected, clamped cursor to now: ${nowUtc.toIso8601String()}');
-      } else {
-        dbg('[PullStrategy][H1-DEBUG] No new events, cursor unchanged: ${rawLastSyncedAt.toIso8601String()}');
       }
-      dbg('[PullStrategy][H1-DEBUG] ===== PULL END =====');
       return Success(PullResult(
         eventsReceived: 0,
         newLastSyncedAt: rawLastSyncedAt.isAfter(nowUtc) ? nowUtc : rawLastSyncedAt,
@@ -157,11 +114,8 @@ class PullStrategyImpl {
     final upsertResult = await _localDataSource.upsertRemoteEvents(remoteEvents);
     
     if (upsertResult.isError) {
-      dbg('[PullStrategy][H1-DEBUG] Upsert FAILED: ${upsertResult.failureOrNull?.message}');
       return Error(upsertResult.failureOrNull!);
     }
-
-    dbg('[PullStrategy] pullEventsForBaby: babyId=$babyId, eventsFetched=${remoteEvents.length}');
 
     // Find the latest created_at from received events
     DateTime? latestCreatedAt;
@@ -179,16 +133,8 @@ class PullStrategyImpl {
     if (latestCreatedAt != null) {
       final currentNow = DateTime.now().toUtc();
       final safeCursor = latestCreatedAt.isAfter(currentNow) ? currentNow : latestCreatedAt;
-      
-      if (latestCreatedAt.isAfter(currentNow)) {
-        dbg('[PullStrategy][H1-DEBUG] WARNING: max(created_at) is in FUTURE! Clamping cursor to now.');
-      }
-      
       await _localDataSource.setLastSyncedAt(babyId, safeCursor);
-      dbg('[PullStrategy][H1-DEBUG] Updated cursor to: ${safeCursor.toIso8601String()}');
     }
-    
-    dbg('[PullStrategy][H1-DEBUG] ===== PULL END =====');
 
     return Success(PullResult(
       eventsReceived: remoteEvents.length,
