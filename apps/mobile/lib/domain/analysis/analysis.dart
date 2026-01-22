@@ -9,6 +9,7 @@
 library analysis;
 
 export 'age_band.dart';
+export 'insight_cards_catalog.dart';
 export 'sleep_expectations.dart';
 export 'sleep_insight.dart';
 export 'sleep_insight_engine.dart';

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
+import 'package:temp_flutter/core/utils/local_time_utils.dart';
 import 'package:temp_flutter/domain/value_objects/sleep_session.dart';
 import 'package:temp_flutter/presentation/theme/night_theme.dart';
 import 'package:temp_flutter/presentation/widgets/starry_background.dart';
@@ -36,22 +37,27 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
     // Derive ALL sessions from timeline (not just events from this day)
     final allSessions = SleepSession.fromEventList(events);
     
-    // Calculate day boundaries (local time)
-    final selectedLocal = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
-    final dayStartLocal = selectedLocal;
-    final dayEndLocal = selectedLocal.add(const Duration(days: 1)).subtract(const Duration(milliseconds: 1));
-    final now = DateTime.now();
-    final isToday = _isSameDay(now, _selectedDate);
+    // Calculate day boundaries using LocalTimeUtils (half-open interval)
+    final dayRange = LocalTimeUtils.localDayRange(_selectedDate);
+    final dayStartLocal = dayRange.startLocal;
+    final dayEndExclusiveLocal = dayRange.endExclusiveLocal;
+    final nowUtc = DateTime.now().toUtc();
+    final isToday = LocalTimeUtils.isSameLocalDay(DateTime.now(), _selectedDate);
     
     // Filter sessions that OVERLAP with the selected day
-    // A session overlaps if: sessionStart <= dayEnd AND sessionEnd >= dayStart
+    // A session overlaps if: sessionStart < dayEndExclusive AND sessionEnd > dayStart
     final sessions = allSessions.where((session) {
-      final sessionStartLocal = session.startEvent.timestamp.toLocal();
+      final sessionStartUtc = session.startEvent.timestamp;
       // For open sessions: use "now" if today, otherwise use day end
-      final sessionEndLocal = session.endEvent?.timestamp.toLocal() 
-          ?? (isToday ? now : dayEndLocal);
+      final sessionEndUtc = session.endEvent?.timestamp 
+          ?? (isToday ? nowUtc : dayEndExclusiveLocal.toUtc());
       
-      return !sessionStartLocal.isAfter(dayEndLocal) && !sessionEndLocal.isBefore(dayStartLocal);
+      return LocalTimeUtils.sessionOverlapsDay(
+        sessionStartUtc: sessionStartUtc,
+        sessionEndUtc: sessionEndUtc,
+        dayStartLocal: dayStartLocal,
+        dayEndExclusiveLocal: dayEndExclusiveLocal,
+      );
     }).toList();
     
     // Calculate totals with CLIPPED duration (only count time within the day)
@@ -59,16 +65,20 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
     int napCount = 0;
     
     for (final session in sessions) {
-      final sessionStartLocal = session.startEvent.timestamp.toLocal();
-      final sessionEndLocal = session.endEvent?.timestamp.toLocal() 
-          ?? (isToday ? now : dayEndLocal);
+      final sessionStartUtc = session.startEvent.timestamp;
+      // For open sessions: use "now" if today, otherwise use day end exclusive
+      final sessionEndUtc = session.endEvent?.timestamp 
+          ?? (isToday ? nowUtc : dayEndExclusiveLocal.toUtc());
       
-      // Clip to day boundaries
-      final clipStart = sessionStartLocal.isBefore(dayStartLocal) ? dayStartLocal : sessionStartLocal;
-      final clipEnd = sessionEndLocal.isAfter(dayEndLocal) ? dayEndLocal : sessionEndLocal;
+      // Clip to day boundaries using helper
+      final clippedDuration = LocalTimeUtils.clipDurationToLocalDay(
+        sessionStartUtc: sessionStartUtc,
+        sessionEndUtc: sessionEndUtc,
+        dayStartLocal: dayStartLocal,
+        dayEndExclusiveLocal: dayEndExclusiveLocal,
+      );
       
-      if (clipEnd.isAfter(clipStart)) {
-        final clippedDuration = clipEnd.difference(clipStart);
+      if (clippedDuration > Duration.zero) {
         totalSleep += clippedDuration;
         
         // Count as nap if clipped duration < 3 hours
@@ -191,14 +201,13 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
   }
 
   String _formatDateHeader(DateTime date) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final selected = DateTime(date.year, date.month, date.day);
+    final todayRange = LocalTimeUtils.todayLocalRange();
+    final yesterdayRange = LocalTimeUtils.yesterdayLocalRange();
+    final selectedRange = LocalTimeUtils.localDayRange(date);
     
-    if (selected == today) {
+    if (selectedRange.key == todayRange.key) {
       return 'Hoje, ${date.day} ${_monthName(date.month)}';
-    } else if (selected == yesterday) {
+    } else if (selectedRange.key == yesterdayRange.key) {
       return 'Ontem, ${date.day} ${_monthName(date.month)}';
     } else {
       return '${date.day} ${_monthName(date.month)}';
@@ -213,19 +222,7 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
     return months[month - 1];
   }
 
-  /// Compara se dois DateTimes são do mesmo dia LOCAL
-  /// 
-  /// IMPORTANTE: Converte para local antes de comparar, porque os eventos
-  /// estão guardados em UTC mas queremos filtrar pelo dia local do utilizador.
-  bool _isSameDay(DateTime eventTimestamp, DateTime selectedDate) {
-    // Converter timestamp do evento (UTC) para local
-    final eventLocal = eventTimestamp.toLocal();
-    final selectedLocal = selectedDate.toLocal();
-    
-    return eventLocal.year == selectedLocal.year && 
-           eventLocal.month == selectedLocal.month && 
-           eventLocal.day == selectedLocal.day;
-  }
+  // Note: _isSameDay replaced by LocalTimeUtils.isSameLocalDay
 
   Future<void> _showDatePicker() async {
     final picked = await showDatePicker(
@@ -451,13 +448,28 @@ class _EditSessionSheetState extends State<_EditSessionSheet> {
     _endTime = TimeOfDay(hour: endLocal.hour, minute: endLocal.minute);
   }
 
-  DateTime _combineDateTime(DateTime date, TimeOfDay time) {
-    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
-  }
-
   void _validate() {
-    final start = _combineDateTime(_startDate, _startTime);
-    final end = _combineDateTime(_endDate, _endTime);
+    // Check for DST gaps first
+    final startValidated = LocalTimeUtils.buildValidatedLocalDateTime(
+      dateLocal: _startDate,
+      time: _startTime,
+    );
+    final endValidated = LocalTimeUtils.buildValidatedLocalDateTime(
+      dateLocal: _endDate,
+      time: _endTime,
+    );
+    
+    if (startValidated.isDstGap) {
+      setState(() => _errorMessage = 'Hora de início inválida (mudança de hora DST)');
+      return;
+    }
+    if (endValidated.isDstGap) {
+      setState(() => _errorMessage = 'Hora de fim inválida (mudança de hora DST)');
+      return;
+    }
+    
+    final start = startValidated.local;
+    final end = endValidated.local;
     
     if (!end.isAfter(start)) {
       setState(() => _errorMessage = 'A hora de fim deve ser depois do início');
@@ -555,8 +567,27 @@ class _EditSessionSheetState extends State<_EditSessionSheet> {
   }
 
   void _submit() {
-    final start = _combineDateTime(_startDate, _startTime);
-    final end = _combineDateTime(_endDate, _endTime);
+    // DST validation
+    final startValidated = LocalTimeUtils.buildValidatedLocalDateTime(
+      dateLocal: _startDate,
+      time: _startTime,
+    );
+    final endValidated = LocalTimeUtils.buildValidatedLocalDateTime(
+      dateLocal: _endDate,
+      time: _endTime,
+    );
+    
+    if (startValidated.isDstGap) {
+      setState(() => _errorMessage = 'Hora de início inválida (mudança de hora DST)');
+      return;
+    }
+    if (endValidated.isDstGap) {
+      setState(() => _errorMessage = 'Hora de fim inválida (mudança de hora DST)');
+      return;
+    }
+    
+    final start = startValidated.local;
+    final end = endValidated.local;
     
     if (!end.isAfter(start)) {
       setState(() => _errorMessage = 'A hora de fim deve ser depois do início');
@@ -570,13 +601,12 @@ class _EditSessionSheetState extends State<_EditSessionSheet> {
   }
 
   String _formatDate(DateTime dt) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    final date = DateTime(dt.year, dt.month, dt.day);
+    final todayRange = LocalTimeUtils.todayLocalRange();
+    final yesterdayRange = LocalTimeUtils.yesterdayLocalRange();
+    final dateKey = LocalTimeUtils.dateKey(dt);
     
-    if (date == today) return 'Hoje';
-    if (date == yesterday) return 'Ontem';
+    if (dateKey == todayRange.key) return 'Hoje';
+    if (dateKey == yesterdayRange.key) return 'Ontem';
     return '${dt.day}/${dt.month}';
   }
 

@@ -48,6 +48,49 @@ class BabiesNotifier extends _$BabiesNotifier {
     state = await AsyncValue.guard(() => _loadBabies());
   }
 
+  /// Updates baby profile locally (offline-first)
+  /// 
+  /// Clears synced_at to mark for re-sync on next auto-sync
+  /// Refreshes the babies list on success
+  Future<Baby> updateBaby({
+    required String babyId,
+    required String name,
+    DateTime? birthDate,
+  }) async {
+    // Get current baby
+    final currentResult = await _localDataSource.getBabyById(babyId);
+    if (currentResult.isError || currentResult.dataOrNull == null) {
+      throw Exception('Baby not found');
+    }
+    
+    final currentBaby = currentResult.dataOrNull!;
+    final now = DateTime.now().toUtc();
+    
+    // Create updated model
+    final updatedModel = BabyModel(
+      id: currentBaby.id,
+      name: name.isNotEmpty ? name : currentBaby.name,
+      createdAt: currentBaby.createdAt,
+      createdBy: currentBaby.createdBy,
+      birthDate: birthDate?.toIso8601String(),
+      updatedAt: now.toIso8601String(),
+      syncedAt: null, // Will be cleared by updateBabyAndMarkForSync
+    );
+    
+    // Save to local database (marks for re-sync)
+    final result = await _localDataSource.updateBabyAndMarkForSync(updatedModel);
+    
+    if (result.isError) {
+      throw Exception(result.failureOrNull?.message ?? 'Failed to update baby');
+    }
+    
+    // Refresh babies list
+    await refresh();
+    
+    // Return updated domain entity
+    return updatedModel.toDomain();
+  }
+
   /// Creates a baby locally (offline-first)
   /// 
   /// Also creates the owner caregiver automatically

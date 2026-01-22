@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:temp_flutter/application/providers/auth_provider.dart';
+import 'package:temp_flutter/core/l10n/l10n.dart';
 import 'package:temp_flutter/presentation/widgets/starry_background.dart';
 import 'package:temp_flutter/presentation/theme/night_theme.dart';
 
@@ -61,7 +62,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Baby Sleep',
+                  context.l10n.appTitle,
                   style: theme.textTheme.headlineLarge?.copyWith(
                     color: NightTheme.primary,
                   ),
@@ -69,7 +70,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Regista o sono do teu bebé',
+                  context.l10n.loginTitle,
                   style: theme.textTheme.bodyLarge?.copyWith(
                     color: NightTheme.textSecondary,
                   ),
@@ -81,7 +82,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 TextField(
                   controller: _emailController,
                   decoration: InputDecoration(
-                    labelText: 'Email',
+                    labelText: context.l10n.loginEmail,
                     hintText: 'your@email.com',
                     prefixIcon: const Icon(Icons.email_outlined),
                     border: OutlineInputBorder(
@@ -113,7 +114,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             color: Colors.white,
                           ),
                         )
-                      : Text(_linkSent ? 'Check your email' : 'Send Magic Link'),
+                      : Text(context.l10n.loginButton),
                 ),
                 const SizedBox(height: 24),
 

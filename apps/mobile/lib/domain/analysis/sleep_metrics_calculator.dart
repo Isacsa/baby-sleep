@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:temp_flutter/core/utils/local_time_utils.dart';
 import 'package:temp_flutter/domain/value_objects/sleep_session.dart';
 import 'package:temp_flutter/domain/value_objects/sleep_state.dart';
 
@@ -89,6 +90,72 @@ class SleepMetricsCalculator {
     // Days with data
     final daysWithData = totalSleepByDay.keys.length;
 
+    // === Extended metrics for Insights v2 ===
+    
+    // Average and median total sleep 7d
+    final (avgTotal7d, medianTotal7d) = _calculateAverageAndMedianTotalSleep(
+      totalSleepByDay, 
+      referenceTime, 
+      lookbackDays: 7,
+    );
+    
+    // Average total sleep 14d
+    final totalSleepByDay14d = _calculateSleepByDay(
+      sessions,
+      referenceTime,
+      lookbackDays: 14,
+    );
+    final (avgTotal14d, _) = _calculateAverageAndMedianTotalSleep(
+      totalSleepByDay14d, 
+      referenceTime, 
+      lookbackDays: 14,
+    );
+    
+    // Bedtime variability range (max - min)
+    final bedtimeVariabilityRange = _calculateBedtimeVariabilityRange(
+      sessions,
+      referenceTime,
+      lookbackDays: lookbackDays,
+    );
+    
+    // Average episodes per night
+    final avgEpisodesPerNight = _calculateAvgEpisodesPerNight(
+      sessions,
+      referenceTime,
+      lookbackDays: lookbackDays,
+    );
+    
+    // Night vs nap split for last 24h
+    final (nightSleep24h, napSleep24h) = _calculateNightVsNapSplit(
+      sessionsLast24h,
+      last24hStart,
+      referenceTime,
+      sleepState,
+    );
+    
+    // Longest session 7d
+    final sessionsLast7d = _sessionsInWindow(
+      sessions, 
+      referenceTime.subtract(const Duration(days: 7)),
+      referenceTime,
+    );
+    final longestSession7d = _longestSession(
+      sessionsLast7d.where((s) => s.isComplete).toList(),
+    );
+    
+    // Average gap between sessions (wake time)
+    final avgGap24h = _calculateAvgGapBetweenSessions(
+      sessionsLast24h,
+      last24hStart,
+      referenceTime,
+    );
+    
+    // Difference from 7d average
+    Duration? diffFromAvg7d;
+    if (avgTotal7d != null) {
+      diffFromAvg7d = totalSleepLast24h - avgTotal7d;
+    }
+
     return SleepMetrics(
       totalSleepLast24h: totalSleepLast24h,
       napCountLast24h: napCountLast24h,
@@ -105,6 +172,17 @@ class SleepMetricsCalculator {
       medianBedtime: medianBedtime,
       daysWithData: daysWithData,
       calculatedAt: referenceTime,
+      // Extended metrics
+      avgTotalSleep7d: avgTotal7d,
+      medianTotalSleep7d: medianTotal7d,
+      avgTotalSleep14d: avgTotal14d,
+      bedtimeVariabilityRangeMinutes: bedtimeVariabilityRange,
+      avgEpisodesPerNight7d: avgEpisodesPerNight,
+      nightSleepLast24h: nightSleep24h,
+      napSleepLast24h: napSleep24h,
+      longestSession7d: longestSession7d,
+      avgGapBetweenSessions24h: avgGap24h,
+      diffFromAvg7d: diffFromAvg7d,
     );
   }
 
@@ -148,16 +226,16 @@ class SleepMetricsCalculator {
     return Duration(minutes: totalMinutes);
   }
 
-  /// Filters sessions that are likely "naps" (daytime, roughly 6:00-20:00)
+  /// Filters sessions that are likely "naps" (daytime, roughly 6:00-18:00 LOCAL time)
   static List<SleepSession> _filterNapSessions(
     List<SleepSession> sessions,
     DateTime referenceTime,
   ) {
     return sessions.where((session) {
-      final startHour = session.startEvent.timestamp.hour;
-      // Nap is roughly between 6:00 and 20:00 and typically shorter
-      // We consider it a nap if it starts between 6:00 and 18:00
-      return startHour >= 6 && startHour < 18 && session.isComplete;
+      // Use LOCAL hour for nap classification
+      final startHourLocal = LocalTimeUtils.localHour(session.startEvent.timestamp);
+      // Nap is roughly between 6:00 and 18:00 local and typically shorter
+      return LocalTimeUtils.isDaytimeHour(startHourLocal) && session.isComplete;
     }).toList();
   }
 
@@ -188,7 +266,7 @@ class SleepMetricsCalculator {
   /// Calculates fragmentation score (0.0 = consolidated, 1.0 = fragmented)
   ///
   /// Heuristic based on:
-  /// - Night waking frequency (sessions between 20:00-06:00)
+  /// - Night waking frequency (sessions between 20:00-06:00 LOCAL)
   /// - Short session rate at night (< 45 min)
   static double _calculateFragmentation(
     List<SleepSession> sessions,
@@ -197,14 +275,15 @@ class SleepMetricsCalculator {
   }) {
     final windowStart = referenceTime.subtract(Duration(days: lookbackDays));
 
-    // Get night sessions (20:00-06:00)
+    // Get night sessions (20:00-06:00 LOCAL time)
     final nightSessions = sessions.where((session) {
       final startTime = session.startEvent.timestamp;
       if (startTime.isBefore(windowStart)) return false;
 
-      final hour = startTime.hour;
-      // Night is 20:00-23:59 or 00:00-05:59
-      return hour >= 20 || hour < 6;
+      // Use LOCAL hour for night classification
+      final hourLocal = LocalTimeUtils.localHour(startTime);
+      // Night is 20:00-23:59 or 00:00-05:59 local
+      return LocalTimeUtils.isNighttimeHour(hourLocal);
     }).toList();
 
     if (nightSessions.isEmpty) return 0.0;
@@ -232,6 +311,7 @@ class SleepMetricsCalculator {
   /// Calculates bedtime consistency (standard deviation in minutes)
   ///
   /// Returns null if fewer than 3 nights of data.
+  /// Uses LOCAL time for bedtime detection and day grouping.
   static double? _calculateBedtimeConsistency(
     List<SleepSession> sessions,
     DateTime referenceTime, {
@@ -246,15 +326,16 @@ class SleepMetricsCalculator {
       final startTime = session.startEvent.timestamp;
       if (startTime.isBefore(windowStart)) continue;
 
-      // Consider bedtime if between 18:00-23:59
-      final hour = startTime.hour;
-      if (hour < 18) continue;
+      // Use LOCAL hour for bedtime detection (18:00-23:59 local)
+      final startLocal = LocalTimeUtils.toLocal(startTime);
+      final hourLocal = startLocal.hour;
+      if (!LocalTimeUtils.isBedtimeHour(hourLocal)) continue;
 
-      // Use date as key (for the evening, use that day's date)
-      final dateKey = _dateKey(startTime);
+      // Use LOCAL date as key (for the evening, use that day's date)
+      final dateKey = LocalTimeUtils.dateKey(startTime);
 
-      // Minutes from midnight (for 19:00 = 19*60 = 1140)
-      final minutesFromMidnight = hour * 60 + startTime.minute;
+      // Minutes from midnight in LOCAL time
+      final minutesFromMidnight = hourLocal * 60 + startLocal.minute;
 
       // Keep earliest bedtime for each day
       if (!bedtimesByDay.containsKey(dateKey) ||
@@ -290,30 +371,52 @@ class SleepMetricsCalculator {
     return completeSessions.firstOrNull?.endEvent?.timestamp;
   }
 
-  /// Calculates total sleep by local day
+  /// Calculates total sleep by LOCAL day with proper clipping
+  ///
+  /// Uses local day boundaries (00:00 local to 00:00 next day local).
+  /// Cross-midnight sessions are clipped to each day they overlap with.
   static Map<String, Duration> _calculateSleepByDay(
     List<SleepSession> sessions,
     DateTime referenceTime, {
     int lookbackDays = 7,
   }) {
     final result = <String, int>{};
+    final nowUtc = DateTime.now().toUtc();
 
     for (var i = 0; i < lookbackDays; i++) {
       final day = referenceTime.subtract(Duration(days: i));
-      final dayStart = DateTime(day.year, day.month, day.day);
-      final dayEnd = dayStart.add(const Duration(days: 1));
-      final dateKey = _dateKey(dayStart);
+      final dayRange = LocalTimeUtils.localDayRange(day);
 
-      final daySessions = _sessionsInWindow(sessions, dayStart, dayEnd);
-      final dayTotal = _totalSleepInWindow(
-        daySessions,
-        dayStart,
-        dayEnd,
-        const SleepState(isSleeping: false),
-      );
+      var dayTotalMinutes = 0;
 
-      if (dayTotal.inMinutes > 0) {
-        result[dateKey] = dayTotal.inMinutes;
+      for (final session in sessions) {
+        final sessionStartUtc = session.startEvent.timestamp;
+        // For incomplete sessions, use now as end
+        final sessionEndUtc = session.endEvent?.timestamp ?? nowUtc;
+
+        // Check if session overlaps with this day
+        if (!LocalTimeUtils.sessionOverlapsDay(
+          sessionStartUtc: sessionStartUtc,
+          sessionEndUtc: sessionEndUtc,
+          dayStartLocal: dayRange.startLocal,
+          dayEndExclusiveLocal: dayRange.endExclusiveLocal,
+        )) {
+          continue;
+        }
+
+        // Clip duration to this day
+        final clippedDuration = LocalTimeUtils.clipDurationToLocalDay(
+          sessionStartUtc: sessionStartUtc,
+          sessionEndUtc: sessionEndUtc,
+          dayStartLocal: dayRange.startLocal,
+          dayEndExclusiveLocal: dayRange.endExclusiveLocal,
+        );
+
+        dayTotalMinutes += clippedDuration.inMinutes;
+      }
+
+      if (dayTotalMinutes > 0) {
+        result[dayRange.key] = dayTotalMinutes;
       }
     }
 
@@ -335,6 +438,8 @@ class SleepMetricsCalculator {
   }
 
   /// Calculates median bedtime from recent nights
+  ///
+  /// Uses LOCAL time for bedtime detection and calculation.
   static DateTime? _calculateMedianBedtime(
     List<SleepSession> sessions,
     DateTime referenceTime, {
@@ -342,7 +447,7 @@ class SleepMetricsCalculator {
   }) {
     final windowStart = referenceTime.subtract(Duration(days: lookbackDays));
 
-    // Collect bedtimes (first night session each evening)
+    // Collect bedtimes (first night session each evening, in LOCAL time)
     final bedtimeMinutes = <int>[];
 
     final bedtimesByDay = <String, DateTime>{};
@@ -351,18 +456,22 @@ class SleepMetricsCalculator {
       final startTime = session.startEvent.timestamp;
       if (startTime.isBefore(windowStart)) continue;
 
-      final hour = startTime.hour;
-      if (hour < 18) continue;
+      // Use LOCAL hour for bedtime detection
+      final startLocal = LocalTimeUtils.toLocal(startTime);
+      final hourLocal = startLocal.hour;
+      if (!LocalTimeUtils.isBedtimeHour(hourLocal)) continue;
 
-      final dateKey = _dateKey(startTime);
+      // Use LOCAL date as key
+      final dateKey = LocalTimeUtils.dateKey(startTime);
 
       if (!bedtimesByDay.containsKey(dateKey) ||
-          startTime.isBefore(bedtimesByDay[dateKey]!)) {
-        bedtimesByDay[dateKey] = startTime;
+          startLocal.isBefore(bedtimesByDay[dateKey]!)) {
+        bedtimesByDay[dateKey] = startLocal;
       }
     }
 
     for (final time in bedtimesByDay.values) {
+      // time is already in local
       bedtimeMinutes.add(time.hour * 60 + time.minute);
     }
 
@@ -371,18 +480,213 @@ class SleepMetricsCalculator {
     bedtimeMinutes.sort();
     final medianMinutes = bedtimeMinutes[bedtimeMinutes.length ~/ 2];
 
-    // Return a DateTime for today with the median time
+    // Return a DateTime for today (local) with the median time
+    final refLocal = LocalTimeUtils.toLocal(referenceTime);
     return DateTime(
-      referenceTime.year,
-      referenceTime.month,
-      referenceTime.day,
+      refLocal.year,
+      refLocal.month,
+      refLocal.day,
       medianMinutes ~/ 60,
       medianMinutes % 60,
     );
   }
 
-  /// Generates a date key string "yyyy-MM-dd"
-  static String _dateKey(DateTime date) {
-    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  // === Extended metrics calculations ===
+
+  /// Calculates average and median total sleep from daily totals
+  ///
+  /// Returns (average, median) as Duration? tuple.
+  /// Requires at least 3 days of data.
+  static (Duration?, Duration?) _calculateAverageAndMedianTotalSleep(
+    Map<String, Duration> totalSleepByDay,
+    DateTime referenceTime, {
+    required int lookbackDays,
+  }) {
+    if (totalSleepByDay.length < 3) return (null, null);
+    
+    final dailyMinutes = totalSleepByDay.values.map((d) => d.inMinutes).toList();
+    if (dailyMinutes.isEmpty) return (null, null);
+    
+    // Average
+    final avg = dailyMinutes.reduce((a, b) => a + b) / dailyMinutes.length;
+    
+    // Median
+    dailyMinutes.sort();
+    final median = dailyMinutes[dailyMinutes.length ~/ 2];
+    
+    return (
+      Duration(minutes: avg.round()),
+      Duration(minutes: median),
+    );
+  }
+
+  /// Calculates bedtime variability range (max - min bedtime) in minutes
+  ///
+  /// Returns null if fewer than 3 nights of data.
+  static int? _calculateBedtimeVariabilityRange(
+    List<SleepSession> sessions,
+    DateTime referenceTime, {
+    int lookbackDays = 7,
+  }) {
+    final windowStart = referenceTime.subtract(Duration(days: lookbackDays));
+    final bedtimeMinutes = <int>[];
+    final bedtimesByDay = <String, int>{};
+
+    for (final session in sessions) {
+      final startTime = session.startEvent.timestamp;
+      if (startTime.isBefore(windowStart)) continue;
+
+      final startLocal = LocalTimeUtils.toLocal(startTime);
+      final hourLocal = startLocal.hour;
+      if (!LocalTimeUtils.isBedtimeHour(hourLocal)) continue;
+
+      final dateKey = LocalTimeUtils.dateKey(startTime);
+      final minutesFromMidnight = hourLocal * 60 + startLocal.minute;
+
+      if (!bedtimesByDay.containsKey(dateKey) ||
+          minutesFromMidnight < bedtimesByDay[dateKey]!) {
+        bedtimesByDay[dateKey] = minutesFromMidnight;
+      }
+    }
+
+    if (bedtimesByDay.length < 3) return null;
+
+    bedtimeMinutes.addAll(bedtimesByDay.values);
+    final minBedtime = bedtimeMinutes.reduce(math.min);
+    final maxBedtime = bedtimeMinutes.reduce(math.max);
+
+    return maxBedtime - minBedtime;
+  }
+
+  /// Calculates average episodes (sessions) per night
+  static double? _calculateAvgEpisodesPerNight(
+    List<SleepSession> sessions,
+    DateTime referenceTime, {
+    int lookbackDays = 7,
+  }) {
+    final windowStart = referenceTime.subtract(Duration(days: lookbackDays));
+    final episodesByNight = <String, int>{};
+
+    for (final session in sessions) {
+      final startTime = session.startEvent.timestamp;
+      if (startTime.isBefore(windowStart)) continue;
+
+      final hourLocal = LocalTimeUtils.localHour(startTime);
+      if (!LocalTimeUtils.isNighttimeHour(hourLocal)) continue;
+
+      // Use the date of the evening (for overnight sessions, this is the start date)
+      final dateKey = LocalTimeUtils.dateKey(startTime);
+      episodesByNight[dateKey] = (episodesByNight[dateKey] ?? 0) + 1;
+    }
+
+    if (episodesByNight.isEmpty) return null;
+
+    final totalEpisodes = episodesByNight.values.reduce((a, b) => a + b);
+    return totalEpisodes / episodesByNight.length;
+  }
+
+  /// Calculates night vs nap split for sessions in a window
+  ///
+  /// Returns (nightSleep, napSleep) as Durations.
+  /// Night = session where >50% of duration falls in night window (19:00-07:00)
+  static (Duration, Duration) _calculateNightVsNapSplit(
+    List<SleepSession> sessions,
+    DateTime windowStart,
+    DateTime windowEnd,
+    SleepState sleepState,
+  ) {
+    var nightMinutes = 0;
+    var napMinutes = 0;
+
+    for (final session in sessions) {
+      final sessionStart = session.startEvent.timestamp;
+      final sessionEnd = session.endEvent?.timestamp ?? windowEnd;
+
+      // Clip to window boundaries
+      final clippedStart = sessionStart.isBefore(windowStart) ? windowStart : sessionStart;
+      final clippedEnd = sessionEnd.isAfter(windowEnd) ? windowEnd : sessionEnd;
+
+      if (!clippedEnd.isAfter(clippedStart)) continue;
+
+      final totalMinutes = clippedEnd.difference(clippedStart).inMinutes;
+      
+      // Calculate how many minutes are in night window (19:00-07:00 local)
+      final nightWindowMinutes = _calculateMinutesInNightWindow(
+        clippedStart,
+        clippedEnd,
+      );
+
+      // Classify: >50% in night window = night, else = nap
+      if (nightWindowMinutes > totalMinutes / 2) {
+        nightMinutes += totalMinutes;
+      } else {
+        napMinutes += totalMinutes;
+      }
+    }
+
+    return (
+      Duration(minutes: nightMinutes),
+      Duration(minutes: napMinutes),
+    );
+  }
+
+  /// Calculates minutes that fall within night window (19:00-07:00 local)
+  static int _calculateMinutesInNightWindow(DateTime start, DateTime end) {
+    var nightMinutes = 0;
+    var current = start;
+
+    while (current.isBefore(end)) {
+      final currentLocal = LocalTimeUtils.toLocal(current);
+      final hourLocal = currentLocal.hour;
+      
+      // Night hours: 19:00-23:59 (19-23) or 00:00-06:59 (0-6)
+      final isNightHour = hourLocal >= 19 || hourLocal < 7;
+      
+      // Move by 1 minute
+      final next = current.add(const Duration(minutes: 1));
+      if (next.isAfter(end)) {
+        if (isNightHour) nightMinutes += 1;
+        break;
+      }
+      
+      if (isNightHour) nightMinutes += 1;
+      current = next;
+    }
+
+    return nightMinutes;
+  }
+
+  /// Calculates average gap between sessions (awake time)
+  static Duration? _calculateAvgGapBetweenSessions(
+    List<SleepSession> sessions,
+    DateTime windowStart,
+    DateTime windowEnd,
+  ) {
+    // Sort by start time
+    final sorted = sessions.toList()
+      ..sort((a, b) => a.startEvent.timestamp.compareTo(b.startEvent.timestamp));
+
+    if (sorted.length < 2) return null;
+
+    var totalGapMinutes = 0;
+    var gapCount = 0;
+
+    for (var i = 1; i < sorted.length; i++) {
+      final prevEnd = sorted[i - 1].endEvent?.timestamp;
+      final currStart = sorted[i].startEvent.timestamp;
+
+      if (prevEnd != null && currStart.isAfter(prevEnd)) {
+        final gap = currStart.difference(prevEnd).inMinutes;
+        if (gap > 0 && gap < 720) { // Ignore gaps > 12h (likely data error)
+          totalGapMinutes += gap;
+          gapCount++;
+        }
+      }
+    }
+
+    if (gapCount == 0) return null;
+
+    return Duration(minutes: totalGapMinutes ~/ gapCount);
   }
 }
+

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:temp_flutter/core/l10n/l10n.dart';
 import 'package:temp_flutter/presentation/theme/night_theme.dart';
 
 /// RelaxPage - Tab Relaxar
@@ -85,11 +86,11 @@ class _RelaxPageState extends State<RelaxPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 16, 20, 8),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
             child: Text(
-              'Relaxar',
-              style: TextStyle(
+              context.l10n.relaxTitle,
+              style: const TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w700,
                 color: NightTheme.textPrimary,
@@ -174,7 +175,7 @@ class _RelaxCard extends StatelessWidget {
           onTap: () {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('${item.title} - Em breve!'),
+                content: Text('${item.title} - ${context.l10n.relaxComingSoon}'),
                 backgroundColor: NightTheme.surface,
               ),
             );

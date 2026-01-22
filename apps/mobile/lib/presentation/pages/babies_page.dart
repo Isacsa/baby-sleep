@@ -6,6 +6,7 @@ import 'package:temp_flutter/application/providers/babies_provider.dart';
 import 'package:temp_flutter/application/providers/active_baby_provider.dart';
 import 'package:temp_flutter/application/providers/sync_provider.dart';
 import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
+import 'package:temp_flutter/core/l10n/l10n.dart';
 import 'package:temp_flutter/presentation/widgets/baby_list_tile.dart';
 import 'package:temp_flutter/presentation/widgets/empty_state.dart';
 import 'package:temp_flutter/presentation/widgets/sync_status_chip.dart';
@@ -48,7 +49,7 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
     return StarryScaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
-        title: const Text('Os meus bebés'),
+        title: Text(context.l10n.babiesTitle),
         centerTitle: true,
         actions: [
           // Sync status
@@ -126,10 +127,9 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
                   if (babies.isEmpty) {
                     return EmptyState(
                       icon: Icons.child_care,
-                      title: 'Ainda sem bebés',
-                      subtitle: 'Novo dispositivo? Puxa os bebés da cloud.\n'
-                          'Ou cria o teu primeiro bebé localmente.',
-                      ctaLabel: 'Puxar Bebés',
+                      title: context.l10n.babiesNoBabies,
+                      subtitle: context.l10n.babiesNoBabies, // Simplified for now
+                      ctaLabel: context.l10n.babiesAddNew,
                       onCtaPressed: user != null ? _pullBabiesGlobal : null,
                     );
                   }
@@ -190,8 +190,8 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
     _nameController.clear();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Create Baby'),
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.babiesAddNew),
         content: TextField(
           controller: _nameController,
           decoration: const InputDecoration(
@@ -203,18 +203,18 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text(context.l10n.commonCancel),
           ),
           FilledButton(
             onPressed: () async {
               final name = _nameController.text.trim();
               if (name.isNotEmpty) {
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 await _createBaby(name);
               }
             },
-            child: const Text('Create'),
+            child: Text(context.l10n.commonSave),
           ),
         ],
       ),

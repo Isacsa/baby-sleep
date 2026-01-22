@@ -1,0 +1,150 @@
+{
+  "@@locale": "pt",
+  "@@last_modified": "2026-01-22",
+
+  "appTitle": "Baby Sleep",
+
+  "tabSleep": "Sono",
+  "tabStats": "Estatísticas",
+  "tabRelax": "Relaxar",
+  "tabInsights": "Insights",
+
+  "homeGreeting": "Olá, como correu a noite?",
+  "homeBabyName": "Bebé {name}",
+  "homeSleepNow": "Dormir Agora",
+  "homeWakeUp": "Acordou",
+  "homeStartedAgo": "Começar há:",
+  "homeOtherTime": "Outra hora",
+  "homeRegisterPastSleep": "Registar sono anterior:",
+  "homeOtherTimePast": "Outra hora (sono anterior)",
+
+  "dayToday": "Hoje",
+  "dayYesterday": "Ontem",
+  "dayTodayWithDate": "Hoje, {day} {month}",
+  "dayYesterdayWithDate": "Ontem, {day} {month}",
+
+  "sessionsSleep": "Sessões de sono",
+  "sessionsCount": "{count} registos",
+  "sessionNap": "Sesta",
+  "sessionNight": "Sono noturno",
+  "sessionCrossMidnight": "Atravessa meia-noite",
+  "sessionStartedYesterday": "Começou ontem",
+  "sessionOngoing": "A dormir...",
+  "sessionInProgress": "em curso",
+
+  "emptyStateNoRecords": "Ainda sem registos hoje",
+  "emptyStateRecordsWillAppear": "Os registos de sono aparecerão aqui",
+
+  "statsTitle": "Estatísticas",
+  "statsWeek": "Semana",
+  "statsMonth": "Mês",
+  "statsNoData": "Ainda sem dados",
+  "statsAvgPerDay": "Média/dia",
+  "statsTotalNaps": "Total sestas",
+  "statsDaysRecorded": "Dias registados",
+
+  "relaxTitle": "Relaxar",
+  "relaxComingSoon": "Em breve",
+
+  "babiesTitle": "Bebés",
+  "babiesAddNew": "Adicionar bebé",
+  "babiesNoBabies": "Ainda sem bebés adicionados",
+  "babiesAge": "{months} meses",
+  "babiesAgeYears": "{years} ano(s)",
+
+  "loginTitle": "Bem-vindo",
+  "loginEmail": "Email",
+  "loginPassword": "Password",
+  "loginButton": "Entrar",
+  "loginRegister": "Criar conta",
+
+  "commonCancel": "Cancelar",
+  "commonSave": "Guardar",
+  "commonDelete": "Eliminar",
+  "commonEdit": "Editar",
+  "commonRetry": "Tentar",
+  "commonOk": "OK",
+
+  "summaryTotalSleep": "Sono total",
+  "summaryNaps": "{count} sestas",
+  "summarySessions": "{count} sessões",
+
+  "durationHours": "{hours}h {minutes}m",
+  "durationMinutes": "{minutes}m",
+
+  "errorGeneric": "Ocorreu um erro",
+  "errorNetwork": "Erro de rede. Verifica a tua ligação.",
+  "errorNoBaby": "Nenhum bebé selecionado",
+
+  "syncSyncing": "A sincronizar...",
+  "syncSynced": "Sincronizado",
+  "syncOffline": "Offline",
+  "syncPending": "{count} pendentes",
+
+  "editSleepTitle": "Editar sono",
+  "editSleepStart": "Início",
+  "editSleepEnd": "Fim",
+  "editSleepEndAfterStart": "A hora de fim deve ser depois do início",
+
+  "deleteSleepTitle": "Eliminar sono?",
+  "deleteSleepConfirm": "Tens a certeza que queres eliminar o sono das {start} às {end}?",
+  "deleteSleepSuccess": "Sono eliminado",
+
+  "overlapTitle": "Já existe sono registado",
+  "overlapReplace": "Substituir sono existente",
+  "overlapReplaced": "Sono substituído",
+
+  "dstInvalidTime": "Hora inválida",
+  "dstTimeNotExist": "A hora {time} não existe neste dia devido à mudança de hora (DST).\n\nPor favor, escolhe outra hora.",
+
+  "preparingPermissions": "A preparar permissões...",
+  "selectBaby": "Seleciona um bebé",
+
+  "whatDay": "Que dia?",
+  "chosenTime": "Hora escolhida: {time}",
+  "todayIsFuture": "Hoje às {time} ainda é futuro",
+  "otherDay": "Outro dia…",
+  "cannotRegisterFuture": "Não é possível registar sono no futuro",
+
+  "whatToRegister": "O que queres registar?",
+  "startAtTime": "Início: {day} às {time}",
+  "stillSleeping": "Ainda está a dormir",
+  "registerCompleteSleep": "Registar sono completo",
+
+  "sleepingSince": "Já está a dormir desde {time}",
+  "whatToDo": "O que queres fazer?",
+  "endSleepNow": "Terminar sono agora",
+  "registerPastCompleteSleep": "Registar sono completo do passado",
+  "sleepEnded": "Sono terminado",
+
+  "whenSleepStarted": "Quando começou o sono?",
+  "whenWokeUp": "Quando acordou?",
+  "startTimeHelp": "Hora de início do sono",
+  "endTimeHelp": "Hora de fim do sono",
+  "startCannotBeFuture": "A hora de início não pode estar no futuro",
+
+  "crossedMidnight": "Atravessou meia-noite?",
+  "crossedMidnightQuestion": "Início às {start} e fim às {end}.\n\nO sono atravessou a meia-noite (dormiu ontem à noite, acordou hoje de manhã)?",
+  "noCorrect": "Não, corrigir",
+  "yes": "Sim",
+
+  "endInFuture": "Hora de fim no futuro",
+  "endCannotBeFuture": "A hora de fim não pode estar no futuro.",
+  "useNow": "Usar agora",
+
+  "syncTitle": "Sincronização",
+  "syncNow": "Sincronizar agora",
+
+  "monthJan": "Jan",
+  "monthFeb": "Fev",
+  "monthMar": "Mar",
+  "monthApr": "Abr",
+  "monthMay": "Mai",
+  "monthJun": "Jun",
+  "monthJul": "Jul",
+  "monthAug": "Ago",
+  "monthSep": "Set",
+  "monthOct": "Out",
+  "monthNov": "Nov",
+  "monthDec": "Dez"
+}

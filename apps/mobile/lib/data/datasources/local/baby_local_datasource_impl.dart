@@ -97,6 +97,31 @@ class BabyLocalDataSourceImpl implements BabyLocalDataSource {
     }
   }
 
+  @override
+  Future<Result<void, Failure>> updateBabyAndMarkForSync(BabyModel baby) async {
+    try {
+      final db = await _localDatabase.database;
+      final now = DateTime.now().toUtc().toIso8601String();
+      
+      // Update baby fields and clear synced_at to mark for re-sync
+      await db.update(
+        'babies',
+        {
+          'name': baby.name,
+          'birth_date': baby.birthDate,
+          'updated_at': now,
+          'synced_at': null, // Mark for re-sync
+        },
+        where: 'id = ?',
+        whereArgs: [baby.id],
+      );
+      
+      return const Success(null);
+    } catch (e) {
+      return Error(StorageFailure('Failed to update baby: $e', originalError: e));
+    }
+  }
+
   // ========== SYNC METHODS (Layered Sync) ==========
   // 
   // These methods support the layered sync strategy:

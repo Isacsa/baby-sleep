@@ -6,6 +6,7 @@ import 'package:temp_flutter/application/providers/sleep_state_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/application/providers/sync_provider.dart';
 import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
+import 'package:temp_flutter/core/utils/local_time_utils.dart';
 import 'package:temp_flutter/domain/entities/baby.dart';
 import 'package:temp_flutter/domain/entities/sleep_event.dart';
 import 'package:temp_flutter/domain/value_objects/sleep_session.dart';
@@ -1118,14 +1119,21 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
         return null;
     }
     
-    // Combine date + time
-    final result = DateTime(
-      selectedDate.year,
-      selectedDate.month,
-      selectedDate.day,
-      time.hour,
-      time.minute,
+    // Combine date + time with DST validation
+    final validated = LocalTimeUtils.buildValidatedLocalDateTime(
+      dateLocal: selectedDate,
+      time: time,
     );
+    
+    // DST gap detection: if the time was adjusted, show warning
+    if (validated.isDstGap) {
+      if (mounted) {
+        await _showDstGapWarning(time);
+      }
+      return null;
+    }
+    
+    final result = validated.local;
     
     // Final validation: never allow future
     if (result.isAfter(now)) {
@@ -1136,6 +1144,33 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     }
     
     return result;
+  }
+
+  /// Shows a warning dialog when user selects a time that doesn't exist due to DST
+  Future<void> _showDstGapWarning(TimeOfDay selectedTime) async {
+    final timeStr = '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}';
+    
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: NightTheme.surface,
+        icon: Icon(Icons.schedule, color: Colors.orange.shade400, size: 32),
+        title: const Text(
+          'Hora inválida',
+          style: TextStyle(color: NightTheme.textPrimary),
+        ),
+        content: Text(
+          'A hora $timeStr não existe neste dia devido à mudança de hora (DST).\n\nPor favor, escolhe outra hora.',
+          style: const TextStyle(color: NightTheme.textSecondary),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   /// Bottom sheet para perguntar intenção: ainda a dormir vs sono completo
@@ -1270,13 +1305,21 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       return;
     }
     
-    DateTime startTime = DateTime(
-      startDate.year,
-      startDate.month,
-      startDate.day,
-      startTimeOfDay.hour,
-      startTimeOfDay.minute,
+    // Combine date + time with DST validation
+    final startValidated = LocalTimeUtils.buildValidatedLocalDateTime(
+      dateLocal: startDate,
+      time: startTimeOfDay,
     );
+    
+    // DST gap detection
+    if (startValidated.isDstGap) {
+      if (mounted) {
+        await _showDstGapWarning(startTimeOfDay);
+      }
+      return;
+    }
+    
+    DateTime startTime = startValidated.local;
     
     // Validate start is not in future
     if (startTime.isAfter(now)) {
@@ -1310,13 +1353,21 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       return;
     }
     
-    DateTime endTime = DateTime(
-      endDate.year,
-      endDate.month,
-      endDate.day,
-      endTimeOfDay.hour,
-      endTimeOfDay.minute,
+    // Combine date + time with DST validation
+    final endValidated = LocalTimeUtils.buildValidatedLocalDateTime(
+      dateLocal: endDate,
+      time: endTimeOfDay,
     );
+    
+    // DST gap detection
+    if (endValidated.isDstGap) {
+      if (mounted) {
+        await _showDstGapWarning(endTimeOfDay);
+      }
+      return;
+    }
+    
+    DateTime endTime = endValidated.local;
     debugPrint('[HomeSleep] End (initial): $endTime');
     
     // === VALIDAÇÕES ===

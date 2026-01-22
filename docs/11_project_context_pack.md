@@ -1,7 +1,7 @@
 # Project Context Pack (Handoff para Novo Chat)
 
-**Última atualização:** 2026-01-19
-**Stack:** Flutter (mobile) + SQLite (offline-first) + Supabase (Auth + RLS + persistência + partilha)
+**Última atualização:** 2026-01-19  
+**Stack:** Flutter (mobile) + SQLite (offline-first) + Supabase (Auth + RLS + persistência + partilha)  
 **Domínio:** tracking parental centrado no bebé (dados sensíveis)
 
 > **Regra de ouro:** a fonte de verdade do domínio/decisões está em `docs/*.txt` e nos `.md` do contrato. Evitar assumir decisões fora desses ficheiros.
@@ -14,7 +14,7 @@ App mobile offline-first para registo manual de sono de bebés:
 - Registo com **1–2 toques**, pensado para uso noturno
 - **Multi-cuidador** e **multi-device** desde início
 - **Estado derivado** no cliente (backend não calcula “a dormir/acordado”)
-- Convergência eventual via sync (push/pull) + **auto-sync/auto-pull** no cliente
+- Convergência eventual via sync (push/pull)
 
 Fontes:
 - `docs/00_product_vision.txt`
@@ -203,7 +203,7 @@ Padrão sugerido para novos módulos (ex.: diário/contexto, feeding, milestones
 ## 11) Limitações conhecidas (não bloqueantes, mas relevantes)
 
 - Como `created_at` é client-provided, clock-skew nunca fica “perfeito” só com heurísticas; o pull atual mitiga com clamp/buffer. Uma melhoria futura é migrar incremental pull para cursor canónico baseado em `synced_at` server-generated (ver `docs/09_sleep_feature_handoff.md`).
-- Auto-sync/auto-pull está desenhado para UX “sem esforço”, mas pode evoluir para backoff e triggers por conectividade quando fizer sentido.
+- Auto-sync está desenhado para UX “sem esforço”, mas pode evoluir para backoff e triggers por conectividade/resume quando fizer sentido.
 
 ---
 
@@ -226,15 +226,7 @@ Com base **apenas** no sono de cada bebé (eventos e sessões derivadas), gerar:
 - **Importante**: este módulo **não deve escrever** na DB nem alterar eventos; apenas ler e derivar.
 
 ### 12.4 Estratégia de implementação (para novo chat começar rápido)
-- Criar uma camada “analysis” no **Domain** (serviço puro) que recebe eventos/sessões e devolve:
-  - métricas (ex.: total por dia, consistência, hora média de início, variabilidade)
-  - insights (mensagens com prioridade/categoria)
-  - sugestões (passos pequenos, tom positivo)
-- Criar providers na **Application** que:
-  - observam `sleepEventsNotifierProvider`
-  - calculam insights em background (sem bloquear UI)
-  - cacheiam resultados por `baby_id` e janela temporal
-- Criar UI dedicada (ex.: página “Insights”) com cards, e um resumo leve na Home.
+- Criar uma camada “analysis” no **Domain** (serviço puro) que recebe eventos/sessões e devolve:\n  - métricas (ex.: total por dia, consistência, hora média de início, variabilidade)\n  - insights (mensagens com prioridade/categoria)\n  - sugestões (passos pequenos, tom positivo)\n+- Criar providers na **Application** que:\n  - observam `sleepEventsNotifierProvider`\n  - calculam insights em background (sem bloquear UI)\n  - cacheiam resultados por `baby_id` e janela temporal\n+- Criar UI dedicada (ex.: página “Insights”) com cards, e um resumo leve na Home.
 
 ### 12.5 Guardrails de produto (para “mundo real”)
 - Evitar linguagem médica/diagnóstica (“insónia”, “distúrbio”, etc.). Preferir: “padrão”, “tendência”, “pode ajudar”.

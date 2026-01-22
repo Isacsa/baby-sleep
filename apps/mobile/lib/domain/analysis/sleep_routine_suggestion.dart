@@ -41,6 +41,20 @@ class SleepRoutineSuggestion {
   /// Message when no suggestion available (Portuguese)
   final String? noSuggestionReasonPt;
 
+  // === Extended fields for Insights v2 ===
+
+  /// Suggested number of naps for the day (based on age if available)
+  final int? suggestedNapsCount;
+
+  /// Estimated nap duration based on recent patterns
+  final Duration? estimatedNapDuration;
+
+  /// Whether the suggestion is based on birthDate age expectations
+  final bool hasAgeBasedSuggestion;
+
+  /// Confidence level for the suggestion (0.0-1.0)
+  final double confidence;
+
   const SleepRoutineSuggestion({
     this.nextNapWindowStart,
     this.nextNapWindowEnd,
@@ -54,6 +68,11 @@ class SleepRoutineSuggestion {
     this.lastWakeTime,
     this.wakeWindowUsedMinutes,
     this.noSuggestionReasonPt,
+    // Extended fields
+    this.suggestedNapsCount,
+    this.estimatedNapDuration,
+    this.hasAgeBasedSuggestion = false,
+    this.confidence = 1.0,
   });
 
   /// Whether we can suggest a next nap

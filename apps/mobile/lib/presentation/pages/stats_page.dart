@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:temp_flutter/application/providers/active_baby_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_metrics_provider.dart';
+import 'package:temp_flutter/core/l10n/l10n.dart';
+import 'package:temp_flutter/core/utils/local_time_utils.dart';
 import 'package:temp_flutter/domain/analysis/sleep_metrics.dart';
 import 'package:temp_flutter/domain/value_objects/sleep_session.dart';
 import 'package:temp_flutter/presentation/theme/night_theme.dart';
@@ -33,8 +35,8 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     final metricsAsync = ref.watch(sleepMetricsWithLookbackProvider(days));
 
     if (activeBaby == null) {
-      return const Center(
-        child: Text('Seleciona um bebé', style: TextStyle(color: NightTheme.textSecondary)),
+      return Center(
+        child: Text(context.l10n.selectBaby, style: const TextStyle(color: NightTheme.textSecondary)),
       );
     }
 
@@ -52,10 +54,10 @@ class _StatsPageState extends ConsumerState<StatsPage> {
             // Header
             Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Estatísticas',
-                    style: TextStyle(
+                    context.l10n.statsTitle,
+                    style: const TextStyle(
                       fontSize: 28,
                       fontWeight: FontWeight.w700,
                       color: NightTheme.textPrimary,
@@ -72,12 +74,12 @@ class _StatsPageState extends ConsumerState<StatsPage> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       _ToggleButton(
-                        label: 'Semana',
+                        label: context.l10n.statsWeek,
                         isSelected: _isWeekly,
                         onTap: () => setState(() => _isWeekly = true),
                       ),
                       _ToggleButton(
-                        label: 'Mês',
+                        label: context.l10n.statsMonth,
                         isSelected: !_isWeekly,
                         onTap: () => setState(() => _isWeekly = false),
                       ),
@@ -98,10 +100,10 @@ class _StatsPageState extends ConsumerState<StatsPage> {
               ),
               padding: const EdgeInsets.all(16),
               child: dailyTotals.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
-                        'Ainda sem dados',
-                        style: TextStyle(color: NightTheme.textSecondary),
+                        context.l10n.statsNoData,
+                        style: const TextStyle(color: NightTheme.textSecondary),
                       ),
                     )
                   : CustomPaint(
@@ -143,7 +145,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
       children: [
         Expanded(
           child: _SummaryCard(
-            label: 'Média/dia',
+            label: context.l10n.statsAvgPerDay,
             value: '${avgHours.toStringAsFixed(1)}h',
             icon: Icons.access_time,
           ),
@@ -151,7 +153,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         const SizedBox(width: 12),
         Expanded(
           child: _SummaryCard(
-            label: 'Total sestas',
+            label: context.l10n.statsTotalNaps,
             value: metrics.napCountLast24h.toString(),
             icon: Icons.brightness_5,
           ),
@@ -159,7 +161,7 @@ class _StatsPageState extends ConsumerState<StatsPage> {
         const SizedBox(width: 12),
         Expanded(
           child: _SummaryCard(
-            label: 'Dias registados',
+            label: context.l10n.statsDaysRecorded,
             value: daysWithData.toString(),
             icon: Icons.calendar_today,
           ),
@@ -231,24 +233,53 @@ class _StatsPageState extends ConsumerState<StatsPage> {
     );
   }
 
+  /// Calculates daily sleep totals using LOCAL day boundaries with proper clipping.
+  ///
+  /// Cross-midnight sessions are clipped to each day they overlap with.
   Map<DateTime, Duration> _calculateDailyTotals(List<SleepSession> sessions, int days) {
     final now = DateTime.now();
-    final startDate = DateTime(now.year, now.month, now.day).subtract(Duration(days: days - 1));
+    final nowUtc = now.toUtc();
+    final todayRange = LocalTimeUtils.localDayRange(now);
+    final startDate = todayRange.startLocal.subtract(Duration(days: days - 1));
     
     final totals = <DateTime, Duration>{};
     
-    for (final session in sessions) {
-      if (session.duration == null) continue;
+    // Iterate through each day in the range
+    for (int dayOffset = 0; dayOffset < days; dayOffset++) {
+      final dayDate = startDate.add(Duration(days: dayOffset));
+      final dayRange = LocalTimeUtils.localDayRange(dayDate);
       
-      final day = DateTime(
-        session.startEvent.timestamp.year,
-        session.startEvent.timestamp.month,
-        session.startEvent.timestamp.day,
-      );
+      Duration dayTotal = Duration.zero;
       
-      if (day.isBefore(startDate)) continue;
+      for (final session in sessions) {
+        // For incomplete sessions, use now as end time
+        final sessionStartUtc = session.startEvent.timestamp;
+        final sessionEndUtc = session.endEvent?.timestamp ?? nowUtc;
+        
+        // Check if session overlaps with this day
+        if (!LocalTimeUtils.sessionOverlapsDay(
+          sessionStartUtc: sessionStartUtc,
+          sessionEndUtc: sessionEndUtc,
+          dayStartLocal: dayRange.startLocal,
+          dayEndExclusiveLocal: dayRange.endExclusiveLocal,
+        )) {
+          continue;
+        }
+        
+        // Clip duration to this day
+        final clippedDuration = LocalTimeUtils.clipDurationToLocalDay(
+          sessionStartUtc: sessionStartUtc,
+          sessionEndUtc: sessionEndUtc,
+          dayStartLocal: dayRange.startLocal,
+          dayEndExclusiveLocal: dayRange.endExclusiveLocal,
+        );
+        
+        dayTotal += clippedDuration;
+      }
       
-      totals[day] = (totals[day] ?? Duration.zero) + session.duration!;
+      if (dayTotal > Duration.zero) {
+        totals[dayRange.startLocal] = dayTotal;
+      }
     }
     
     return totals;
@@ -350,7 +381,8 @@ class _BarChartPainter extends CustomPainter {
     if (dailyTotals.isEmpty) return;
 
     final now = DateTime.now();
-    final startDate = DateTime(now.year, now.month, now.day).subtract(Duration(days: days - 1));
+    final todayRange = LocalTimeUtils.localDayRange(now);
+    final startDate = todayRange.startLocal.subtract(Duration(days: days - 1));
     
     // Find max value
     double maxHours = 0;
@@ -366,7 +398,8 @@ class _BarChartPainter extends CustomPainter {
     // Draw bars
     for (int i = 0; i < days; i++) {
       final date = startDate.add(Duration(days: i));
-      final duration = dailyTotals[date];
+      final dayRange = LocalTimeUtils.localDayRange(date);
+      final duration = dailyTotals[dayRange.startLocal];
       
       if (duration != null) {
         final hours = duration.inMinutes / 60.0;

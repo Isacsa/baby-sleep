@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:temp_flutter/application/providers/active_baby_provider.dart';
 import 'package:temp_flutter/application/providers/auth_provider.dart';
 import 'package:temp_flutter/application/providers/sync_provider.dart';
+import 'package:temp_flutter/core/l10n/l10n.dart';
 import 'package:temp_flutter/domain/entities/baby.dart';
 import 'package:temp_flutter/presentation/widgets/starry_background.dart';
 import 'package:temp_flutter/presentation/widgets/floating_bottom_bar.dart';
@@ -158,26 +159,26 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
           onTap: (index) {
             setState(() => _currentIndex = index);
           },
-          items: const [
+          items: [
             FloatingBottomBarItem(
               icon: Icons.bedtime_outlined,
               selectedIcon: Icons.bedtime,
-              label: 'Sono',
+              label: context.l10n.tabSleep,
             ),
             FloatingBottomBarItem(
               icon: Icons.lightbulb_outline,
               selectedIcon: Icons.lightbulb,
-              label: 'Insights',
+              label: context.l10n.tabInsights,
             ),
             FloatingBottomBarItem(
               icon: Icons.spa_outlined,
               selectedIcon: Icons.spa,
-              label: 'Relaxar',
+              label: context.l10n.tabRelax,
             ),
             FloatingBottomBarItem(
               icon: Icons.bar_chart_outlined,
               selectedIcon: Icons.bar_chart,
-              label: 'Estatísticas',
+              label: context.l10n.tabStats,
             ),
           ],
         ),

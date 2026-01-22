@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:temp_flutter/core/l10n/l10n.dart';
 import 'package:temp_flutter/presentation/theme/night_theme.dart';
 
 /// DaySummaryCard - Card com resumo do dia
@@ -61,9 +62,9 @@ class DaySummaryCard extends StatelessWidget {
                     color: NightTheme.textPrimary,
                   ),
                 ),
-                const Text(
-                  'Total',
-                  style: TextStyle(
+                Text(
+                  context.l10n.summaryTotalSleep,
+                  style: const TextStyle(
                     fontSize: 12,
                     color: NightTheme.textSecondary,
                   ),
@@ -97,9 +98,9 @@ class DaySummaryCard extends StatelessWidget {
                     color: NightTheme.textPrimary,
                   ),
                 ),
-                const Text(
-                  'Sestas',
-                  style: TextStyle(
+                Text(
+                  context.l10n.statsTotalNaps,
+                  style: const TextStyle(
                     fontSize: 12,
                     color: NightTheme.textSecondary,
                   ),
@@ -133,9 +134,9 @@ class DaySummaryCard extends StatelessWidget {
                     color: NightTheme.textPrimary,
                   ),
                 ),
-                const Text(
-                  'Sessões',
-                  style: TextStyle(
+                Text(
+                  context.l10n.sessionsSleep,
+                  style: const TextStyle(
                     fontSize: 12,
                     color: NightTheme.textSecondary,
                   ),

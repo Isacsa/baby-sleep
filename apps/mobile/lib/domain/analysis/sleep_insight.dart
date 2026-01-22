@@ -1,3 +1,4 @@
+import 'age_band.dart';
 import 'sleep_expectations.dart';
 
 /// A single insight about sleep patterns
@@ -7,6 +8,7 @@ import 'sleep_expectations.dart';
 /// - A message (empathetic, non-medical)
 /// - Evidence (which metrics led to this insight)
 /// - Optional action suggestion
+/// - Cooldown and display rules
 class SleepInsight {
   /// Unique identifier for this insight type
   final String id;
@@ -32,6 +34,32 @@ class SleepInsight {
   /// Whether this is a positive/neutral/needs-attention insight
   final InsightTone tone;
 
+  // === Extended fields for Insights v2 ===
+
+  /// Cooldown in hours before this insight can be shown again
+  final int cooldownHours;
+
+  /// Minimum days of data required to show this insight
+  final int requiresDataDays;
+
+  /// Whether this insight requires birth date to be shown
+  final bool requiresDob;
+
+  /// Age bands this insight applies to (null = all ages)
+  final List<SleepAgeBand>? ageBands;
+
+  /// CTA action type
+  final InsightCtaAction ctaAction;
+
+  /// CTA label (Portuguese)
+  final String? ctaLabel;
+
+  /// Reference sources for the insight
+  final List<String> sourcesRefs;
+
+  /// Confidence level (0.0-1.0), used for ranking
+  final double confidence;
+
   const SleepInsight({
     required this.id,
     required this.category,
@@ -41,6 +69,15 @@ class SleepInsight {
     this.actionPt,
     this.rangeComparison,
     required this.tone,
+    // Extended fields with defaults
+    this.cooldownHours = 24,
+    this.requiresDataDays = 1,
+    this.requiresDob = false,
+    this.ageBands,
+    this.ctaAction = InsightCtaAction.none,
+    this.ctaLabel,
+    this.sourcesRefs = const [],
+    this.confidence = 1.0,
   });
 
   @override
@@ -122,6 +159,27 @@ extension InsightToneExtension on InsightTone {
   bool get isPositive => this == InsightTone.positive;
   bool get isNeutral => this == InsightTone.neutral;
   bool get needsAttention => this == InsightTone.attention;
+}
+
+/// CTA action types for insights
+enum InsightCtaAction {
+  /// No action
+  none,
+  
+  /// Open a specific anchor in the Guide section
+  openGuideAnchor,
+  
+  /// Open a checklist bottom sheet
+  openChecklist,
+  
+  /// Open the baby profile to add DOB
+  openBabyProfile,
+  
+  /// Open the routine editor
+  openRoutineEditor,
+  
+  /// Save as favorite
+  saveFavorite,
 }
 
 /// A suggested action for today

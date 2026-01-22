@@ -25,6 +25,12 @@ abstract class BabyLocalDataSource {
   /// Deletes baby from local storage
   Future<Result<void, Failure>> deleteBaby(String babyId);
 
+  /// Updates baby in local storage and marks for re-sync
+  /// 
+  /// Clears synced_at to NULL so baby appears in getUnsyncedBabies()
+  /// and will be pushed to Supabase on next sync
+  Future<Result<void, Failure>> updateBabyAndMarkForSync(BabyModel baby);
+
   // ========== SYNC METHODS (Layered Sync) ==========
 
   /// Gets babies that have not been synced to remote

@@ -1,0 +1,531 @@
+{
+  "@@locale": "en",
+  "@@last_modified": "2026-01-22",
+  
+  "appTitle": "Baby Sleep",
+  "@appTitle": {
+    "description": "The title of the application"
+  },
+
+  "tabSleep": "Sleep",
+  "@tabSleep": {
+    "description": "Label for the sleep tab"
+  },
+  "tabStats": "Stats",
+  "@tabStats": {
+    "description": "Label for the stats tab"
+  },
+  "tabRelax": "Relax",
+  "@tabRelax": {
+    "description": "Label for the relax tab"
+  },
+  "tabInsights": "Insights",
+  "@tabInsights": {
+    "description": "Label for the insights tab"
+  },
+
+  "homeGreeting": "Hello, how was the night?",
+  "@homeGreeting": {
+    "description": "Greeting on the home page"
+  },
+  "homeBabyName": "Baby {name}",
+  "@homeBabyName": {
+    "description": "Baby name display on home",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Noah"
+      }
+    }
+  },
+  "homeSleepNow": "Sleep Now",
+  "@homeSleepNow": {
+    "description": "Button label to start sleep"
+  },
+  "homeWakeUp": "Wake Up",
+  "@homeWakeUp": {
+    "description": "Button label to end sleep"
+  },
+  "homeStartedAgo": "Started:",
+  "@homeStartedAgo": {
+    "description": "Label before quick time chips"
+  },
+  "homeOtherTime": "Other time",
+  "@homeOtherTime": {
+    "description": "Button to select a custom time"
+  },
+  "homeRegisterPastSleep": "Register past sleep:",
+  "@homeRegisterPastSleep": {
+    "description": "Label when already sleeping"
+  },
+  "homeOtherTimePast": "Other time (past sleep)",
+  "@homeOtherTimePast": {
+    "description": "Button to register past sleep while already sleeping"
+  },
+
+  "dayToday": "Today",
+  "@dayToday": {
+    "description": "Label for today"
+  },
+  "dayYesterday": "Yesterday",
+  "@dayYesterday": {
+    "description": "Label for yesterday"
+  },
+  "dayTodayWithDate": "Today, {day} {month}",
+  "@dayTodayWithDate": {
+    "description": "Today with date",
+    "placeholders": {
+      "day": {"type": "int"},
+      "month": {"type": "String"}
+    }
+  },
+  "dayYesterdayWithDate": "Yesterday, {day} {month}",
+  "@dayYesterdayWithDate": {
+    "description": "Yesterday with date",
+    "placeholders": {
+      "day": {"type": "int"},
+      "month": {"type": "String"}
+    }
+  },
+
+  "sessionsSleep": "Sleep sessions",
+  "@sessionsSleep": {
+    "description": "Header for sleep sessions list"
+  },
+  "sessionsCount": "{count} records",
+  "@sessionsCount": {
+    "description": "Number of records",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "sessionNap": "Nap",
+  "@sessionNap": {
+    "description": "Label for nap session"
+  },
+  "sessionNight": "Night sleep",
+  "@sessionNight": {
+    "description": "Label for night sleep session"
+  },
+  "sessionCrossMidnight": "Crosses midnight",
+  "@sessionCrossMidnight": {
+    "description": "Note for sessions that cross midnight"
+  },
+  "sessionStartedYesterday": "Started yesterday",
+  "@sessionStartedYesterday": {
+    "description": "Note for sessions that started yesterday"
+  },
+  "sessionOngoing": "Sleeping...",
+  "@sessionOngoing": {
+    "description": "Label for ongoing sleep"
+  },
+  "sessionInProgress": "in progress",
+  "@sessionInProgress": {
+    "description": "Short label for ongoing session"
+  },
+
+  "emptyStateNoRecords": "No records yet",
+  "@emptyStateNoRecords": {
+    "description": "Empty state title"
+  },
+  "emptyStateRecordsWillAppear": "Sleep records will appear here",
+  "@emptyStateRecordsWillAppear": {
+    "description": "Empty state subtitle"
+  },
+
+  "statsTitle": "Statistics",
+  "@statsTitle": {
+    "description": "Stats page title"
+  },
+  "statsWeek": "Week",
+  "@statsWeek": {
+    "description": "Week toggle label"
+  },
+  "statsMonth": "Month",
+  "@statsMonth": {
+    "description": "Month toggle label"
+  },
+  "statsNoData": "No data yet",
+  "@statsNoData": {
+    "description": "No stats data message"
+  },
+  "statsAvgPerDay": "Avg/day",
+  "@statsAvgPerDay": {
+    "description": "Average per day label"
+  },
+  "statsTotalNaps": "Total naps",
+  "@statsTotalNaps": {
+    "description": "Total naps label"
+  },
+  "statsDaysRecorded": "Days recorded",
+  "@statsDaysRecorded": {
+    "description": "Days with records label"
+  },
+
+  "relaxTitle": "Relax",
+  "@relaxTitle": {
+    "description": "Relax page title"
+  },
+  "relaxComingSoon": "Coming soon",
+  "@relaxComingSoon": {
+    "description": "Relax coming soon message"
+  },
+
+  "babiesTitle": "Babies",
+  "@babiesTitle": {
+    "description": "Babies page title"
+  },
+  "babiesAddNew": "Add baby",
+  "@babiesAddNew": {
+    "description": "Add baby button"
+  },
+  "babiesNoBabies": "No babies added yet",
+  "@babiesNoBabies": {
+    "description": "Empty state for babies"
+  },
+  "babiesAge": "{months} months",
+  "@babiesAge": {
+    "description": "Baby age in months",
+    "placeholders": {
+      "months": {"type": "int"}
+    }
+  },
+  "babiesAgeYears": "{years} year(s)",
+  "@babiesAgeYears": {
+    "description": "Baby age in years",
+    "placeholders": {
+      "years": {"type": "int"}
+    }
+  },
+
+  "loginTitle": "Welcome",
+  "@loginTitle": {
+    "description": "Login page title"
+  },
+  "loginEmail": "Email",
+  "@loginEmail": {
+    "description": "Email field label"
+  },
+  "loginPassword": "Password",
+  "@loginPassword": {
+    "description": "Password field label"
+  },
+  "loginButton": "Sign in",
+  "@loginButton": {
+    "description": "Login button"
+  },
+  "loginRegister": "Create account",
+  "@loginRegister": {
+    "description": "Register link"
+  },
+
+  "commonCancel": "Cancel",
+  "@commonCancel": {
+    "description": "Cancel button"
+  },
+  "commonSave": "Save",
+  "@commonSave": {
+    "description": "Save button"
+  },
+  "commonDelete": "Delete",
+  "@commonDelete": {
+    "description": "Delete button"
+  },
+  "commonEdit": "Edit",
+  "@commonEdit": {
+    "description": "Edit button"
+  },
+  "commonRetry": "Retry",
+  "@commonRetry": {
+    "description": "Retry button"
+  },
+  "commonOk": "OK",
+  "@commonOk": {
+    "description": "OK button"
+  },
+
+  "summaryTotalSleep": "Total sleep",
+  "@summaryTotalSleep": {
+    "description": "Total sleep label in summary"
+  },
+  "summaryNaps": "{count} naps",
+  "@summaryNaps": {
+    "description": "Nap count in summary",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "summarySessions": "{count} sessions",
+  "@summarySessions": {
+    "description": "Session count in summary",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+
+  "durationHours": "{hours}h {minutes}m",
+  "@durationHours": {
+    "description": "Duration with hours and minutes",
+    "placeholders": {
+      "hours": {"type": "int"},
+      "minutes": {"type": "int"}
+    }
+  },
+  "durationMinutes": "{minutes}m",
+  "@durationMinutes": {
+    "description": "Duration in minutes only",
+    "placeholders": {
+      "minutes": {"type": "int"}
+    }
+  },
+
+  "errorGeneric": "An error occurred",
+  "@errorGeneric": {
+    "description": "Generic error message"
+  },
+  "errorNetwork": "Network error. Check your connection.",
+  "@errorNetwork": {
+    "description": "Network error message"
+  },
+  "errorNoBaby": "No baby selected",
+  "@errorNoBaby": {
+    "description": "Error when no baby is selected"
+  },
+
+  "syncSyncing": "Syncing...",
+  "@syncSyncing": {
+    "description": "Syncing status"
+  },
+  "syncSynced": "Synced",
+  "@syncSynced": {
+    "description": "Synced status"
+  },
+  "syncOffline": "Offline",
+  "@syncOffline": {
+    "description": "Offline status"
+  },
+  "syncPending": "{count} pending",
+  "@syncPending": {
+    "description": "Pending sync count",
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+
+  "editSleepTitle": "Edit sleep",
+  "@editSleepTitle": {
+    "description": "Edit sleep sheet title"
+  },
+  "editSleepStart": "Start",
+  "@editSleepStart": {
+    "description": "Start time label"
+  },
+  "editSleepEnd": "End",
+  "@editSleepEnd": {
+    "description": "End time label"
+  },
+  "editSleepEndAfterStart": "End time must be after start",
+  "@editSleepEndAfterStart": {
+    "description": "Validation error"
+  },
+
+  "deleteSleepTitle": "Delete sleep?",
+  "@deleteSleepTitle": {
+    "description": "Delete confirmation title"
+  },
+  "deleteSleepConfirm": "Are you sure you want to delete the sleep from {start} to {end}?",
+  "@deleteSleepConfirm": {
+    "description": "Delete confirmation message",
+    "placeholders": {
+      "start": {"type": "String"},
+      "end": {"type": "String"}
+    }
+  },
+  "deleteSleepSuccess": "Sleep deleted",
+  "@deleteSleepSuccess": {
+    "description": "Delete success message"
+  },
+
+  "overlapTitle": "Overlapping sleep exists",
+  "@overlapTitle": {
+    "description": "Overlap warning title"
+  },
+  "overlapReplace": "Replace existing sleep",
+  "@overlapReplace": {
+    "description": "Replace button for overlap"
+  },
+  "overlapReplaced": "Sleep replaced",
+  "@overlapReplaced": {
+    "description": "Replacement success message"
+  },
+
+  "dstInvalidTime": "Invalid time",
+  "@dstInvalidTime": {
+    "description": "DST gap warning title"
+  },
+  "dstTimeNotExist": "The time {time} does not exist on this day due to daylight saving time (DST).\n\nPlease choose another time.",
+  "@dstTimeNotExist": {
+    "description": "DST gap warning message",
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+
+  "preparingPermissions": "Preparing permissions...",
+  "@preparingPermissions": {
+    "description": "Loading banner for caregiver context"
+  },
+  "selectBaby": "Select a baby",
+  "@selectBaby": {
+    "description": "Prompt to select a baby"
+  },
+
+  "whatDay": "Which day?",
+  "@whatDay": {
+    "description": "Day picker title"
+  },
+  "chosenTime": "Chosen time: {time}",
+  "@chosenTime": {
+    "description": "Chosen time label",
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "todayIsFuture": "Today at {time} is still in the future",
+  "@todayIsFuture": {
+    "description": "Warning when today with chosen time is future",
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "otherDay": "Other day...",
+  "@otherDay": {
+    "description": "Other day option"
+  },
+  "cannotRegisterFuture": "Cannot register sleep in the future",
+  "@cannotRegisterFuture": {
+    "description": "Future time error"
+  },
+
+  "whatToRegister": "What do you want to register?",
+  "@whatToRegister": {
+    "description": "Intent sheet title"
+  },
+  "startAtTime": "Start: {day} at {time}",
+  "@startAtTime": {
+    "description": "Start time summary",
+    "placeholders": {
+      "day": {"type": "String"},
+      "time": {"type": "String"}
+    }
+  },
+  "stillSleeping": "Still sleeping",
+  "@stillSleeping": {
+    "description": "Option for still sleeping"
+  },
+  "registerCompleteSleep": "Register complete sleep",
+  "@registerCompleteSleep": {
+    "description": "Option for complete sleep"
+  },
+
+  "sleepingSince": "Already sleeping since {time}",
+  "@sleepingSince": {
+    "description": "Already sleeping message",
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "whatToDo": "What do you want to do?",
+  "@whatToDo": {
+    "description": "Question for already sleeping modal"
+  },
+  "endSleepNow": "End sleep now",
+  "@endSleepNow": {
+    "description": "Option to end current sleep"
+  },
+  "registerPastCompleteSleep": "Register complete past sleep",
+  "@registerPastCompleteSleep": {
+    "description": "Option to register past sleep"
+  },
+  "sleepEnded": "Sleep ended",
+  "@sleepEnded": {
+    "description": "Success message for ending sleep"
+  },
+
+  "whenSleepStarted": "When did sleep start?",
+  "@whenSleepStarted": {
+    "description": "Start date picker title"
+  },
+  "whenWokeUp": "When did they wake up?",
+  "@whenWokeUp": {
+    "description": "End date picker title"
+  },
+  "startTimeHelp": "Sleep start time",
+  "@startTimeHelp": {
+    "description": "Start time picker help text"
+  },
+  "endTimeHelp": "Sleep end time",
+  "@endTimeHelp": {
+    "description": "End time picker help text"
+  },
+  "startCannotBeFuture": "Start time cannot be in the future",
+  "@startCannotBeFuture": {
+    "description": "Start future error"
+  },
+
+  "crossedMidnight": "Crossed midnight?",
+  "@crossedMidnight": {
+    "description": "Midnight dialog title"
+  },
+  "crossedMidnightQuestion": "Start at {start} and end at {end}.\n\nDid the sleep cross midnight (slept last night, woke up this morning)?",
+  "@crossedMidnightQuestion": {
+    "description": "Midnight dialog question",
+    "placeholders": {
+      "start": {"type": "String"},
+      "end": {"type": "String"}
+    }
+  },
+  "noCorrect": "No, correct",
+  "@noCorrect": {
+    "description": "No option for midnight dialog"
+  },
+  "yes": "Yes",
+  "@yes": {
+    "description": "Yes button"
+  },
+
+  "endInFuture": "End time in future",
+  "@endInFuture": {
+    "description": "Future end time dialog title"
+  },
+  "endCannotBeFuture": "End time cannot be in the future.",
+  "@endCannotBeFuture": {
+    "description": "Future end time error"
+  },
+  "useNow": "Use now",
+  "@useNow": {
+    "description": "Use current time button"
+  },
+
+  "syncTitle": "Synchronization",
+  "@syncTitle": {
+    "description": "Sync modal title"
+  },
+  "syncNow": "Sync now",
+  "@syncNow": {
+    "description": "Sync now button"
+  },
+
+  "monthJan": "Jan",
+  "monthFeb": "Feb",
+  "monthMar": "Mar",
+  "monthApr": "Apr",
+  "monthMay": "May",
+  "monthJun": "Jun",
+  "monthJul": "Jul",
+  "monthAug": "Aug",
+  "monthSep": "Sep",
+  "monthOct": "Oct",
+  "monthNov": "Nov",
+  "monthDec": "Dec"
+}
