@@ -7,6 +7,7 @@ import 'package:temp_flutter/application/providers/sleep_expectations_provider.d
 import 'package:temp_flutter/application/providers/sleep_insights_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_metrics_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_routine_provider.dart';
+import 'package:temp_flutter/core/l10n/l10n.dart';
 import 'package:temp_flutter/domain/analysis/age_band.dart';
 import 'package:temp_flutter/domain/analysis/sleep_insight.dart';
 import 'package:temp_flutter/domain/analysis/sleep_metrics.dart';
@@ -94,7 +95,7 @@ class _HeaderSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final dateFormat = DateFormat('d MMM', 'pt_PT');
+    final dateFormat = DateFormat('d MMM', Localizations.localeOf(context).toLanguageTag());
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,7 +139,7 @@ class _HeaderSection extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Selecionar bebé', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
+            Text(context.l10n.selectBaby, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
             const SizedBox(height: 16),
             ...babies.map((b) => ListTile(
               leading: Icon(b.id == baby.id ? Icons.check_circle : Icons.circle_outlined, color: b.id == baby.id ? NightTheme.accent : NightTheme.textSecondary),
@@ -166,10 +167,10 @@ class _NoBirthDateBanner extends StatelessWidget {
         border: Border.all(color: NightTheme.accent.withValues(alpha: 0.3)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Row(children: [
-          Icon(Icons.cake_outlined, size: 20, color: NightTheme.accent),
-          SizedBox(width: 10),
-          Expanded(child: Text('Para personalizar insights por idade, adiciona a data de nascimento.', style: TextStyle(fontSize: 13, color: NightTheme.textBody))),
+        Row(children: [
+          const Icon(Icons.cake_outlined, size: 20, color: NightTheme.accent),
+          const SizedBox(width: 10),
+          Expanded(child: Text(context.l10n.insightsAddDobBanner, style: const TextStyle(fontSize: 13, color: NightTheme.textBody))),
         ]),
         const SizedBox(height: 12),
         SizedBox(
@@ -177,7 +178,7 @@ class _NoBirthDateBanner extends StatelessWidget {
           child: TextButton(
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (context) => BabyProfilePage(baby: baby, showSkipOption: true))),
             style: TextButton.styleFrom(backgroundColor: NightTheme.accent, foregroundColor: NightTheme.backgroundTop, padding: const EdgeInsets.symmetric(vertical: 10), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-            child: const Text('Adicionar agora', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+            child: Text(context.l10n.insightsAddNow, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
           ),
         ),
       ]),
@@ -195,7 +196,7 @@ class _TodaySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Hoje', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
+      Text(context.l10n.dayToday, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
       const SizedBox(height: 12),
       _Summary24hCard(metrics: metrics),
       if (topInsight != null) ...[const SizedBox(height: 10), _MainInsightCard(insight: topInsight!)],
@@ -219,31 +220,31 @@ class _Summary24hCard extends StatelessWidget {
         Row(children: [
           const Icon(Icons.nights_stay, size: 20, color: NightTheme.primary),
           const SizedBox(width: 10),
-          const Text('Resumo 24h', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
+          Text(context.l10n.insightSummary24hTitle, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
           const Spacer(),
           if (metrics.isCurrentlySleeping)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(color: NightTheme.primary.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(8)),
-              child: const Text('Em curso', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: NightTheme.primary)),
+              child: Text(context.l10n.sessionInProgress, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: NightTheme.primary)),
             ),
         ]),
         const SizedBox(height: 14),
         Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
           Text(metrics.totalSleepLast24hFormatted, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w700, color: NightTheme.textPrimary)),
           const SizedBox(width: 8),
-          Padding(padding: const EdgeInsets.only(bottom: 6), child: Text('total', style: TextStyle(fontSize: 14, color: NightTheme.textSecondary.withValues(alpha: 0.7)))),
+          Padding(padding: const EdgeInsets.only(bottom: 6), child: Text(context.l10n.totalLabel, style: TextStyle(fontSize: 14, color: NightTheme.textSecondary.withValues(alpha: 0.7)))),
         ]),
         if (hasComparison) ...[
           const SizedBox(height: 8),
           Row(children: [
             Icon(metrics.diffFromAvg7d!.inMinutes >= 0 ? Icons.trending_up : Icons.trending_down, size: 16, color: metrics.diffFromAvg7d!.inMinutes >= 0 ? NightTheme.success : NightTheme.warning),
             const SizedBox(width: 6),
-            Text('${metrics.diffFromAvg7dFormatted} vs média 7 dias', style: const TextStyle(fontSize: 12, color: NightTheme.textSecondary)),
+            Text(context.l10n.insightsVsAvg7Days(metrics.diffFromAvg7dFormatted ?? ''), style: const TextStyle(fontSize: 12, color: NightTheme.textSecondary)),
           ]),
         ] else if (metrics.daysWithData < 3) ...[
           const SizedBox(height: 8),
-          const Text('Ainda a aprender o padrão do teu bebé.', style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: NightTheme.textSecondary)),
+          Text(context.l10n.insightsLearning, style: const TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: NightTheme.textSecondary)),
         ],
         if (metrics.nightSleepLast24h.inMinutes > 0 || metrics.napSleepLast24h.inMinutes > 0) ...[
           const SizedBox(height: 12),
@@ -296,7 +297,7 @@ class _MainInsightCardState extends State<_MainInsightCard> {
         Row(children: [
           Icon(Icons.lightbulb_outline, size: 18, color: toneColor),
           const SizedBox(width: 8),
-          const Text('Ponto principal', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
+          Text(context.l10n.insightsMainPoint, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
         ]),
         const SizedBox(height: 10),
         Text(widget.insight.messagePt, style: const TextStyle(fontSize: 14, color: NightTheme.textBody, height: 1.4)),
@@ -328,10 +329,10 @@ class _NextStepCard extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: NightTheme.primary.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14), border: Border.all(color: NightTheme.primary.withValues(alpha: 0.3), width: 1)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Row(children: [
-          Icon(Icons.arrow_forward, size: 18, color: NightTheme.primary),
-          SizedBox(width: 8),
-          Text('Próximo passo', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
+        Row(children: [
+          const Icon(Icons.arrow_forward, size: 18, color: NightTheme.primary),
+          const SizedBox(width: 8),
+          Text(context.l10n.insightsNextStep, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
         ]),
         const SizedBox(height: 10),
         Text(action.titlePt, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
@@ -340,16 +341,16 @@ class _NextStepCard extends StatelessWidget {
         const SizedBox(height: 12),
         Row(children: [
           OutlinedButton.icon(
-            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Guardado nos favoritos'), duration: Duration(seconds: 2))),
+            onPressed: () => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.insightsSavedFavorites), duration: const Duration(seconds: 2))),
             icon: const Icon(Icons.bookmark_border, size: 16),
-            label: const Text('Guardar'),
+            label: Text(context.l10n.insightCtaSave),
             style: OutlinedButton.styleFrom(foregroundColor: NightTheme.textSecondary, side: BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.3)), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), textStyle: const TextStyle(fontSize: 12)),
           ),
           const SizedBox(width: 8),
           OutlinedButton.icon(
             onPressed: null,
             icon: const Icon(Icons.notifications_none, size: 16),
-            label: const Text('Em breve'),
+            label: Text(context.l10n.relaxComingSoon),
             style: OutlinedButton.styleFrom(foregroundColor: NightTheme.textSecondary.withValues(alpha: 0.5), side: BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.2)), padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), textStyle: const TextStyle(fontSize: 12)),
           ),
         ]),
@@ -368,16 +369,16 @@ class _PatternsSection extends StatelessWidget {
     if (insights.isEmpty && daysWithData < 7) return const SizedBox.shrink();
 
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Padrões detetados', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
+      Text(context.l10n.insightsHeaderPatterns, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
       const SizedBox(height: 12),
       if (insights.isEmpty)
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: NightTheme.surface, borderRadius: BorderRadius.circular(14)),
-          child: const Row(children: [
-            Icon(Icons.search, size: 20, color: NightTheme.textSecondary),
-            SizedBox(width: 12),
-            Expanded(child: Text('Ainda a recolher dados para identificar padrões.', style: TextStyle(fontSize: 13, color: NightTheme.textSecondary))),
+          child: Row(children: [
+            const Icon(Icons.search, size: 20, color: NightTheme.textSecondary),
+            const SizedBox(width: 12),
+            Expanded(child: Text(context.l10n.insightsCollectingPatterns, style: const TextStyle(fontSize: 13, color: NightTheme.textSecondary))),
           ]),
         )
       else
@@ -414,19 +415,19 @@ class _RoutineSection extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Row(children: [
-        const Text('Rotina sugerida', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
+        Text(context.l10n.insightsHeaderRoutine, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
         const SizedBox(width: 8),
-        Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: NightTheme.textSecondary.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)), child: const Text('sugestão', style: TextStyle(fontSize: 10, color: NightTheme.textSecondary))),
+        Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: NightTheme.textSecondary.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(6)), child: Text(context.l10n.insightsSuggestionLabel, style: const TextStyle(fontSize: 10, color: NightTheme.textSecondary))),
       ]),
       const SizedBox(height: 12),
       if (!routine.hasSufficientData && metrics.daysWithData < 3)
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: NightTheme.surface, borderRadius: BorderRadius.circular(14)),
-          child: const Row(children: [
-            Icon(Icons.schedule, size: 20, color: NightTheme.textSecondary),
-            SizedBox(width: 12),
-            Expanded(child: Text('Regista mais algumas noites para receber sugestões de rotina personalizadas.', style: TextStyle(fontSize: 13, color: NightTheme.textSecondary))),
+          child: Row(children: [
+            const Icon(Icons.schedule, size: 20, color: NightTheme.textSecondary),
+            const SizedBox(width: 12),
+            Expanded(child: Text(context.l10n.insightsRegisterMoreNights, style: const TextStyle(fontSize: 13, color: NightTheme.textSecondary))),
           ]),
         )
       else
@@ -447,7 +448,7 @@ class _RoutineSection extends StatelessWidget {
                 Text(s, style: const TextStyle(fontSize: 13, color: NightTheme.textBody)),
               ]),
             )),
-            if (!hasBirthDate) ...[const SizedBox(height: 12), Text('Define a data de nascimento para sugestões por idade.', style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: NightTheme.textSecondary.withValues(alpha: 0.8)))],
+            if (!hasBirthDate) ...[const SizedBox(height: 12), Text(context.l10n.insightsDefineDobForAge, style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: NightTheme.textSecondary.withValues(alpha: 0.8)))],
           ]),
         ),
     ]);
@@ -482,7 +483,7 @@ class _GuideSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('Guia', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
+      Text(context.l10n.insightsHeaderGuide, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
       const SizedBox(height: 12),
       _GuideItem(title: 'Normal por idade', subtitle: hasBirthDate && ageBand != null ? 'Para ${ageBand!.labelPt}' : 'Adiciona DOB para ver', icon: Icons.child_care, onTap: () {
         if (!hasBirthDate) {
@@ -499,10 +500,10 @@ class _GuideSection extends StatelessWidget {
       Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(color: NightTheme.surface.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(10)),
-        child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(Icons.info_outline, size: 16, color: NightTheme.textSecondary),
-          SizedBox(width: 8),
-          Expanded(child: Text('Informação educativa; não substitui aconselhamento médico.', style: TextStyle(fontSize: 11, color: NightTheme.textSecondary))),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Icon(Icons.info_outline, size: 16, color: NightTheme.textSecondary),
+          const SizedBox(width: 8),
+          Expanded(child: Text(context.l10n.guideDisclaimer, style: const TextStyle(fontSize: 11, color: NightTheme.textSecondary))),
         ]),
       ),
     ]);
@@ -546,12 +547,12 @@ class _EmptyStateNoBaby extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Padding(padding: EdgeInsets.all(32), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-      Icon(Icons.child_care, size: 48, color: NightTheme.textSecondary),
-      SizedBox(height: 16),
-      Text('Seleciona um bebé', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
-      SizedBox(height: 8),
-      Text('Para ver insights personalizados.', style: TextStyle(fontSize: 14, color: NightTheme.textSecondary)),
+    return Center(child: Padding(padding: const EdgeInsets.all(32), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+      const Icon(Icons.child_care, size: 48, color: NightTheme.textSecondary),
+      const SizedBox(height: 16),
+      Text(context.l10n.selectBaby, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
+      const SizedBox(height: 8),
+      Text(context.l10n.insightsToSeePersonalized, style: const TextStyle(fontSize: 14, color: NightTheme.textSecondary)),
     ])));
   }
 }
@@ -567,11 +568,11 @@ class _EmptyStateNoData extends StatelessWidget {
       child: Column(children: [
         const Icon(Icons.bedtime_outlined, size: 48, color: NightTheme.textSecondary),
         const SizedBox(height: 16),
-        const Text('Ainda não há registos de sono', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
+        Text(context.l10n.insightsNoRecordsYet, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: NightTheme.textPrimary)),
         const SizedBox(height: 8),
-        const Text('Regista o primeiro sono na aba "Sono" para começar a ver insights.', textAlign: TextAlign.center, style: TextStyle(fontSize: 13, color: NightTheme.textSecondary)),
+        Text(context.l10n.insightsRecordFirstSleep, textAlign: TextAlign.center, style: const TextStyle(fontSize: 13, color: NightTheme.textSecondary)),
         const SizedBox(height: 16),
-        TextButton.icon(onPressed: () {}, icon: const Icon(Icons.add, size: 18), label: const Text('Registar sono'), style: TextButton.styleFrom(foregroundColor: NightTheme.primary)),
+        TextButton.icon(onPressed: () {}, icon: const Icon(Icons.add, size: 18), label: Text(context.l10n.insightsRegisterSleep), style: TextButton.styleFrom(foregroundColor: NightTheme.primary)),
       ]),
     );
   }

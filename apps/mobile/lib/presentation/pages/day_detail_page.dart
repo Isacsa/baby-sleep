@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
+import 'package:temp_flutter/core/l10n/l10n.dart';
 import 'package:temp_flutter/core/utils/local_time_utils.dart';
 import 'package:temp_flutter/domain/value_objects/sleep_session.dart';
 import 'package:temp_flutter/presentation/theme/night_theme.dart';
@@ -257,27 +258,28 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
     final startStr = '${startLocal.hour.toString().padLeft(2, '0')}:${startLocal.minute.toString().padLeft(2, '0')}';
     final endStr = '${endLocal.hour.toString().padLeft(2, '0')}:${endLocal.minute.toString().padLeft(2, '0')}';
     
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: NightTheme.surface,
-        title: const Text(
-          'Eliminar sono?',
-          style: TextStyle(color: NightTheme.textPrimary),
+        title: Text(
+          l10n.deleteSleepTitle,
+          style: const TextStyle(color: NightTheme.textPrimary),
         ),
         content: Text(
-          'Tens a certeza que queres eliminar o sono das $startStr às $endStr?',
+          l10n.deleteSleepConfirm(startStr, endStr),
           style: const TextStyle(color: NightTheme.textSecondary),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.commonCancel),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.red),
-            child: const Text('Eliminar'),
+            child: Text(l10n.commonDelete),
           ),
         ],
       ),
@@ -288,8 +290,8 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
         await ref.read(sleepEventsNotifierProvider.notifier).deleteSleepSession(session: session);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Sono eliminado'),
+            SnackBar(
+              content: Text(l10n.deleteSleepSuccess),
               backgroundColor: Colors.green,
               behavior: SnackBarBehavior.floating,
             ),
@@ -299,7 +301,7 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Erro: ${e.message}'),
+              content: Text(l10n.errorWithMessage(e.message)),
               backgroundColor: Colors.red,
               behavior: SnackBarBehavior.floating,
             ),
@@ -330,6 +332,7 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
     DateTime newEndTime,
     List<SleepSession> extraOverwrite,
   ) async {
+    final l10n = context.l10n;
     try {
       await ref.read(sleepEventsNotifierProvider.notifier).editSleepSession(
         original: session,
@@ -339,8 +342,8 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Sono editado'),
+          SnackBar(
+            content: Text(l10n.editSleepSuccess),
             backgroundColor: Colors.green,
             behavior: SnackBarBehavior.floating,
           ),
@@ -358,7 +361,7 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Erro: ${e.message}'),
+            content: Text(l10n.errorWithMessage(e.message)),
             backgroundColor: Colors.red,
             behavior: SnackBarBehavior.floating,
           ),
@@ -369,6 +372,7 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
 
   /// Shows confirmation dialog for overlapping sessions
   Future<bool?> _showOverlapConfirmation(List<SleepSession> overlapping) {
+    final l10n = context.l10n;
     final sessionsStr = overlapping.map((s) {
       final start = s.startEvent.timestamp.toLocal();
       final end = s.endEvent?.timestamp.toLocal();
@@ -377,30 +381,30 @@ class _DayDetailPageState extends ConsumerState<DayDetailPage> {
         final endStr = '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
         return '$startStr - $endStr';
       }
-      return 'desde $startStr';
+      return l10n.sinceSomething(startStr);
     }).join(', ');
     
     return showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: NightTheme.surface,
-        title: const Text(
-          'Sobrepõe outro sono',
-          style: TextStyle(color: NightTheme.textPrimary),
+        title: Text(
+          l10n.overlapOtherSleep,
+          style: const TextStyle(color: NightTheme.textPrimary),
         ),
         content: Text(
-          'O novo período sobrepõe: $sessionsStr\n\nQueres substituir?',
+          l10n.overlapNewPeriodMessage(sessionsStr),
           style: const TextStyle(color: NightTheme.textSecondary),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Cancelar'),
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(l10n.commonCancel),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
+            onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: Colors.orange),
-            child: const Text('Substituir'),
+            child: Text(l10n.overlapReplace),
           ),
         ],
       ),
@@ -739,7 +743,7 @@ class _EditSessionSheetState extends State<_EditSessionSheet> {
                         side: BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.3)),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const Text('Cancelar'),
+                      child: Text(context.l10n.commonCancel),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -751,7 +755,7 @@ class _EditSessionSheetState extends State<_EditSessionSheet> {
                         foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const Text('Guardar'),
+                      child: Text(context.l10n.commonSave),
                     ),
                   ),
                 ],
@@ -976,23 +980,23 @@ class _SessionTile extends StatelessWidget {
                 }
               },
               itemBuilder: (context) => [
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'edit',
                   child: Row(
                     children: [
-                      Icon(Icons.edit, size: 18),
-                      SizedBox(width: 8),
-                      Text('Editar'),
+                      const Icon(Icons.edit, size: 18),
+                      const SizedBox(width: 8),
+                      Text(context.l10n.commonEdit),
                     ],
                   ),
                 ),
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'delete',
                   child: Row(
                     children: [
-                      Icon(Icons.delete, size: 18, color: Colors.red),
-                      SizedBox(width: 8),
-                      Text('Eliminar', style: TextStyle(color: Colors.red)),
+                      const Icon(Icons.delete, size: 18, color: Colors.red),
+                      const SizedBox(width: 8),
+                      Text(context.l10n.commonDelete, style: const TextStyle(color: Colors.red)),
                     ],
                   ),
                 ),

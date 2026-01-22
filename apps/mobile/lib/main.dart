@@ -55,6 +55,15 @@ class MyApp extends StatelessWidget {
       ],
       supportedLocales: supportedLocales,
       
+      // Custom locale resolution: PT if language=pt OR region=PT, otherwise EN
+      localeResolutionCallback: (deviceLocale, supportedLocales) {
+        return AppLocalePolicy.resolve(deviceLocale, null, supportedLocales);
+      },
+      localeListResolutionCallback: (deviceLocales, supportedLocales) {
+        final primary = deviceLocales?.isNotEmpty == true ? deviceLocales!.first : null;
+        return AppLocalePolicy.resolve(primary, deviceLocales, supportedLocales);
+      },
+      
       // Night Theme - conforme spec
       theme: NightTheme.themeData,
       darkTheme: NightTheme.themeData,

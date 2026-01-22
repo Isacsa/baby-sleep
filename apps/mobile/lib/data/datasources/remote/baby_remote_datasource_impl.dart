@@ -119,42 +119,51 @@ class BabyRemoteDataSourceImpl implements BabyRemoteDataSource {
     try {
       _ensureAuthenticated();
 
-      // DEBUG: Log comparison between created_by and auth.uid()
-      final currentUserId = _client.auth.currentUser?.id;
       // ignore: avoid_print
-      print('[BabyRemote] auth.uid() = $currentUserId');
-      // ignore: avoid_print
-      print('[BabyRemote] baby.createdBy = ${baby.createdBy}');
-      // ignore: avoid_print
-      print('[BabyRemote] Match: ${currentUserId == baby.createdBy}');
+      print('[BabyRemote] Upserting baby: ${baby.id}');
       // ignore: avoid_print
       print('[BabyRemote] Payload: ${baby.toRemoteJson()}');
 
-      // Use INSERT instead of UPSERT
+      // Strategy: INSERT first, UPDATE on duplicate key
       // 
       // WHY: The RLS INSERT policy requires created_by = auth.uid()
-      // UPSERT may trigger UPDATE path which has different RLS requirements
-      // Since we only push babies that are not yet synced (synced_at IS NULL),
-      // the baby should not exist in Supabase yet, so INSERT is correct.
-      // 
-      // Idempotency: If INSERT fails with duplicate key (baby already exists),
-      // we catch the error and treat it as success (baby is already there).
-      await _client.from('babies').insert(baby.toRemoteJson());
-
-      return const Success(null);
+      // For new babies, we use INSERT.
+      // For existing babies (e.g., updated birth_date), we fallback to UPDATE.
+      // UPDATE is allowed by RLS if user is owner or editor (can_write).
+      try {
+        await _client.from('babies').insert(baby.toRemoteJson());
+        // ignore: avoid_print
+        print('[BabyRemote] INSERT succeeded for baby ${baby.id}');
+        return const Success(null);
+      } on sb.PostgrestException catch (insertError) {
+        // If duplicate key (baby already exists), try UPDATE instead
+        if (insertError.code == '23505') {
+          // ignore: avoid_print
+          print('[BabyRemote] Baby ${baby.id} exists, trying UPDATE...');
+          
+          // UPDATE only mutable fields (name, birth_date, updated_at)
+          // created_by and created_at are immutable (enforced by DB trigger)
+          await _client
+              .from('babies')
+              .update({
+                'name': baby.name,
+                'birth_date': baby.birthDate,
+                'updated_at': baby.updatedAt,
+              })
+              .eq('id', baby.id);
+          
+          // ignore: avoid_print
+          print('[BabyRemote] UPDATE succeeded for baby ${baby.id}');
+          return const Success(null);
+        }
+        // Re-throw other PostgrestExceptions to be handled below
+        rethrow;
+      }
     } on sb.AuthException catch (e) {
       return Error(AuthFailure(e.message));
     } on sb.PostgrestException catch (e) {
       // ignore: avoid_print
       print('[BabyRemote] PostgrestException: code=${e.code}, message=${e.message}');
-      
-      // Handle duplicate key as success (baby already exists)
-      if (e.code == '23505') {
-        // ignore: avoid_print
-        print('[BabyRemote] Baby already exists in Supabase - treating as success');
-        return const Success(null);
-      }
-      
       return Error(_mapPostgrestError(e));
     } catch (e) {
       return Error(NetworkFailure('Network error: $e'));

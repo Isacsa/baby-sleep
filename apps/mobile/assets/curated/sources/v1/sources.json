@@ -1,0 +1,77 @@
+{
+  "version": "1.0.0",
+  "sources": [
+    {
+      "id": "AAP",
+      "name": "American Academy of Pediatrics",
+      "publisher": "AAP",
+      "url": "https://www.aap.org"
+    },
+    {
+      "id": "CDC",
+      "name": "Centers for Disease Control and Prevention",
+      "publisher": "CDC",
+      "url": "https://www.cdc.gov"
+    },
+    {
+      "id": "NHS",
+      "name": "NHS UK",
+      "publisher": "National Health Service",
+      "url": "https://www.nhs.uk"
+    },
+    {
+      "id": "AASM",
+      "name": "American Academy of Sleep Medicine",
+      "publisher": "AASM",
+      "url": "https://aasm.org"
+    },
+    {
+      "id": "AAP_safe_sleep",
+      "name": "AAP Safe Sleep Guidelines",
+      "publisher": "American Academy of Pediatrics",
+      "url": "https://www.aap.org/en/patient-care/safe-sleep/"
+    },
+    {
+      "id": "CDC_safe_sleep",
+      "name": "CDC Safe Sleep for Babies",
+      "publisher": "Centers for Disease Control and Prevention",
+      "url": "https://www.cdc.gov/sids/about/"
+    },
+    {
+      "id": "NHS_safe_sleep",
+      "name": "NHS Reduce the Risk of Sudden Infant Death",
+      "publisher": "National Health Service",
+      "url": "https://www.nhs.uk/conditions/baby/caring-for-a-newborn/reduce-the-risk-of-sudden-infant-death-syndrome/"
+    },
+    {
+      "id": "NHS_day_night",
+      "name": "NHS Helping Your Baby to Sleep",
+      "publisher": "National Health Service",
+      "url": "https://www.nhs.uk/conditions/baby/caring-for-a-newborn/helping-your-baby-to-sleep/"
+    },
+    {
+      "id": "AAP_bedtime_routine",
+      "name": "AAP Bedtime Routines",
+      "publisher": "American Academy of Pediatrics",
+      "url": "https://www.healthychildren.org/English/ages-stages/baby/sleep/Pages/Getting-Your-Baby-to-Sleep.aspx"
+    },
+    {
+      "id": "NHS_bedtime_routine",
+      "name": "NHS Bedtime Routine",
+      "publisher": "National Health Service",
+      "url": "https://www.nhs.uk/conditions/baby/caring-for-a-newborn/helping-your-baby-to-sleep/"
+    },
+    {
+      "id": "AASM_sleep_duration",
+      "name": "AASM Recommended Sleep Duration",
+      "publisher": "American Academy of Sleep Medicine",
+      "url": "https://aasm.org/resources/pdf/pediatricsleepdurationconsensus.pdf"
+    },
+    {
+      "id": "AAP_screens",
+      "name": "AAP Media and Children",
+      "publisher": "American Academy of Pediatrics",
+      "url": "https://www.aap.org/en/patient-care/media-and-children/"
+    }
+  ]
+}

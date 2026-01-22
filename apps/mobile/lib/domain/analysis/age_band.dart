@@ -2,6 +2,7 @@
 ///
 /// Maps a baby's birthDate to an age band with associated sleep expectations.
 /// Bands are defined based on developmental stages (0-28d, 1-2m, 2-4m, etc.)
+library;
 
 /// Represents age bands for sleep expectations
 ///

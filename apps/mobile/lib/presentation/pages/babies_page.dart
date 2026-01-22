@@ -60,25 +60,25 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
           // Overflow menu
           PopupMenuButton<String>(
             onSelected: (value) => _handleMenuAction(value, user),
-            itemBuilder: (context) => [
-              const PopupMenuItem(
+            itemBuilder: (ctx) => [
+              PopupMenuItem(
                 value: 'logout',
                 child: Row(
                   children: [
-                    Icon(Icons.logout),
-                    SizedBox(width: 8),
-                    Text('Logout'),
+                    const Icon(Icons.logout),
+                    const SizedBox(width: 8),
+                    Text(context.l10n.menuLogout),
                   ],
                 ),
               ),
               if (kDebugMode)
-                const PopupMenuItem(
+                PopupMenuItem(
                   value: 'debug',
                   child: Row(
                     children: [
-                      Icon(Icons.bug_report),
-                      SizedBox(width: 8),
-                      Text('Debug'),
+                      const Icon(Icons.bug_report),
+                      const SizedBox(width: 8),
+                      Text(context.l10n.menuDebug),
                     ],
                   ),
                 ),
@@ -101,14 +101,14 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
                             ? null
                             : _pullBabiesGlobal,
                         icon: const Icon(Icons.cloud_download),
-                        label: const Text('Pull Babies (Global)'),
+                        label: Text(context.l10n.babiesPullGlobal),
                       ),
                     ),
                     const SizedBox(width: 12),
                     FilledButton.icon(
                       onPressed: () => _showCreateBabyDialog(context),
                       icon: const Icon(Icons.add),
-                      label: const Text('New'),
+                      label: Text(context.l10n.babiesNew),
                     ),
                   ],
                 ),
@@ -120,7 +120,7 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (e, _) => EmptyState(
                   icon: Icons.error_outline,
-                  title: 'Error loading babies',
+                  title: context.l10n.babiesErrorLoading,
                   subtitle: e.toString(),
                 ),
                 data: (babies) {
@@ -194,9 +194,9 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
         title: Text(context.l10n.babiesAddNew),
         content: TextField(
           controller: _nameController,
-          decoration: const InputDecoration(
-            labelText: 'Baby name',
-            hintText: 'e.g., Emma',
+          decoration: InputDecoration(
+            labelText: context.l10n.babiesNameLabel,
+            hintText: context.l10n.babiesNameHint,
           ),
           autofocus: true,
           textCapitalization: TextCapitalization.words,
@@ -222,6 +222,7 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
   }
 
   Future<void> _createBaby(String name) async {
+    final l10n = context.l10n;
     try {
       await ref.read(babiesNotifierProvider.notifier).createLocalBaby(
             name: name,
@@ -229,7 +230,7 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Baby "$name" created'),
+            content: Text(l10n.babiesCreatedSuccess(name)),
             backgroundColor: Theme.of(context).colorScheme.primary,
           ),
         );
@@ -238,7 +239,7 @@ class _BabiesPageState extends ConsumerState<BabiesPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to create baby: $e'),
+            content: Text(l10n.babiesCreatedError(e.toString())),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );

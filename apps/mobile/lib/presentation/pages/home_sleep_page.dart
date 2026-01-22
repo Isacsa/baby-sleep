@@ -6,6 +6,7 @@ import 'package:temp_flutter/application/providers/sleep_state_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/application/providers/sync_provider.dart';
 import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
+import 'package:temp_flutter/core/l10n/l10n.dart';
 import 'package:temp_flutter/core/utils/local_time_utils.dart';
 import 'package:temp_flutter/domain/entities/baby.dart';
 import 'package:temp_flutter/domain/entities/sleep_event.dart';
@@ -217,25 +218,30 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
           
           // Baby name
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Bebé $babyName',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: NightTheme.textPrimary,
-                  ),
-                ),
-                const Text(
-                  'Olá, como correu a noite?',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: NightTheme.textSecondary,
-                  ),
-                ),
-              ],
+            child: Builder(
+              builder: (ctx) {
+                final l10n = ctx.l10n;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      l10n.homeBabyName(babyName),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: NightTheme.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      l10n.homeGreeting,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: NightTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
           
@@ -262,31 +268,36 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
           
           // Debug menu (only in debug mode)
           if (kDebugMode)
-            PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert, color: NightTheme.textSecondary),
-              onSelected: _handleMenuAction,
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'debug',
-                  child: Row(
-                    children: [
-                      Icon(Icons.bug_report),
-                      SizedBox(width: 8),
-                      Text('Debug'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'switch',
-                  child: Row(
-                    children: [
-                      Icon(Icons.swap_horiz),
-                      SizedBox(width: 8),
-                      Text('Mudar bebé'),
-                    ],
-                  ),
-                ),
-              ],
+            Builder(
+              builder: (ctx) {
+                final l10n = ctx.l10n;
+                return PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: NightTheme.textSecondary),
+                  onSelected: _handleMenuAction,
+                  itemBuilder: (context) => [
+                    PopupMenuItem(
+                      value: 'debug',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.bug_report),
+                          const SizedBox(width: 8),
+                          Text(l10n.menuDebug),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
+                      value: 'switch',
+                      child: Row(
+                        children: [
+                          const Icon(Icons.swap_horiz),
+                          const SizedBox(width: 8),
+                          Text(l10n.menuSwitchBaby),
+                        ],
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
         ],
       ),
@@ -301,9 +312,9 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
         color: NightTheme.primary.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Row(
+      child: Row(
         children: [
-          SizedBox(
+          const SizedBox(
             width: 18,
             height: 18,
             child: CircularProgressIndicator(
@@ -311,10 +322,10 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
               color: NightTheme.primary,
             ),
           ),
-          SizedBox(width: 12),
+          const SizedBox(width: 12),
           Text(
-            'A preparar permissões...',
-            style: TextStyle(color: NightTheme.textPrimary),
+            context.l10n.preparingPermissions,
+            style: const TextStyle(color: NightTheme.textPrimary),
           ),
         ],
       ),
@@ -351,7 +362,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
           FilledButton.icon(
             onPressed: _ensureCaregiverContext,
             icon: const Icon(Icons.refresh, size: 18),
-            label: const Text('Tentar novamente'),
+            label: Text(context.l10n.commonRetry),
             style: FilledButton.styleFrom(
               backgroundColor: NightTheme.error,
               foregroundColor: Colors.white,
@@ -364,11 +375,12 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
   }
 
   Widget _buildQuickTimeChips() {
+    final l10n = context.l10n;
     return Column(
       children: [
         Text(
-          'Começar há:',
-          style: TextStyle(
+          l10n.homeStartedAgo,
+          style: const TextStyle(
             fontSize: 14,
             color: NightTheme.textSecondary,
           ),
@@ -392,7 +404,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
               onTap: () => _handleQuickStart(15),
             ),
             QuickTimeChip(
-              label: 'Outra hora',
+              label: l10n.homeOtherTime,
               icon: Icons.schedule,
               onTap: _handleCustomTime,
             ),
@@ -404,18 +416,19 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
 
   /// Chip shown when baby is SLEEPING - allows registering past sleep sessions
   Widget _buildRetroactiveOnlyChip() {
+    final l10n = context.l10n;
     return Column(
       children: [
         Text(
-          'Registar sono anterior:',
-          style: TextStyle(
+          l10n.homeRegisterPastSleep,
+          style: const TextStyle(
             fontSize: 14,
             color: NightTheme.textSecondary,
           ),
         ),
         const SizedBox(height: 12),
         QuickTimeChip(
-          label: 'Outra hora (sono anterior)',
+          label: l10n.homeOtherTimePast,
           icon: Icons.history,
           onTap: _handleCustomTimeWhileSleeping,
         ),
@@ -461,8 +474,9 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     final baby = ref.read(activeBabyProvider);
     final context = ref.read(caregiverContextProvider);
     
+    final l10n = this.context.l10n;
     if (baby == null) {
-      _showErrorSnackBar('Nenhum bebé selecionado');
+      _showErrorSnackBar(l10n.errorNoBaby);
       return false;
     }
     
@@ -473,10 +487,10 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     // Show appropriate message based on state
     final message = switch (context) {
       CaregiverContextLoading() || CaregiverContextInitial() => 
-        'A preparar permissões. Aguarda um momento.',
+        l10n.preparingPermissionsWait,
       CaregiverContextOfflineNoCaregiver(:final message) => message,
       CaregiverContextError(:final message) => message,
-      _ => 'Não tens permissão para criar eventos.',
+      _ => l10n.noPermissionToCreate,
     };
     
     _showErrorSnackBar(message);
@@ -554,9 +568,10 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
 
   /// Shows modal when user tries to register sleep while baby is already sleeping
   Future<_SleepingModalChoice?> _showAlreadySleepingModal(DateTime? sleepingSince) async {
+    final l10n = context.l10n;
     final sinceStr = sleepingSince != null
         ? '${sleepingSince.toLocal().hour.toString().padLeft(2, '0')}:${sleepingSince.toLocal().minute.toString().padLeft(2, '0')}'
-        : 'hora desconhecida';
+        : l10n.unknownTime;
     
     return showModalBottomSheet<_SleepingModalChoice>(
       context: context,
@@ -564,7 +579,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Padding(
+      builder: (ctx) => Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -586,11 +601,11 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             // Title
             Row(
               children: [
-                Icon(Icons.bedtime, color: NightTheme.primary, size: 28),
+                const Icon(Icons.bedtime, color: NightTheme.primary, size: 28),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Já está a dormir desde $sinceStr',
+                    l10n.sleepingSince(sinceStr),
                     style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -602,8 +617,8 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'O que queres fazer?',
-              style: TextStyle(
+              l10n.whatToDo,
+              style: const TextStyle(
                 fontSize: 14,
                 color: NightTheme.textSecondary,
               ),
@@ -612,9 +627,9 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             
             // Option 1: End now
             FilledButton.icon(
-              onPressed: () => Navigator.pop(context, _SleepingModalChoice.endNow),
+              onPressed: () => Navigator.pop(ctx, _SleepingModalChoice.endNow),
               icon: const Icon(Icons.stop_circle_outlined),
-              label: const Text('Terminar sono agora'),
+              label: Text(l10n.endSleepNow),
               style: FilledButton.styleFrom(
                 backgroundColor: NightTheme.primary,
                 foregroundColor: Colors.white,
@@ -625,9 +640,9 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             
             // Option 2: Register past sleep
             OutlinedButton.icon(
-              onPressed: () => Navigator.pop(context, _SleepingModalChoice.registerPastSleep),
+              onPressed: () => Navigator.pop(ctx, _SleepingModalChoice.registerPastSleep),
               icon: const Icon(Icons.history),
-              label: const Text('Registar sono completo do passado'),
+              label: Text(l10n.registerPastCompleteSleep),
               style: OutlinedButton.styleFrom(
                 foregroundColor: NightTheme.textPrimary,
                 side: BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.3)),
@@ -638,15 +653,15 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             
             // Option 3: Cancel
             TextButton(
-              onPressed: () => Navigator.pop(context, _SleepingModalChoice.cancel),
+              onPressed: () => Navigator.pop(ctx, _SleepingModalChoice.cancel),
               child: Text(
-                'Cancelar',
+                l10n.commonCancel,
                 style: TextStyle(color: NightTheme.textSecondary),
               ),
             ),
             
             // Bottom padding for safe area
-            SizedBox(height: MediaQuery.of(context).padding.bottom),
+            SizedBox(height: MediaQuery.of(ctx).padding.bottom),
           ],
         ),
       ),
@@ -660,7 +675,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       await ref.read(sleepEventsNotifierProvider.notifier).createSleepEnd();
       debugPrint('[HomeSleep] Sleep ended successfully');
       if (mounted) {
-        _showSuccessSnackBar('Sono terminado');
+        _showSuccessSnackBar(context.l10n.sleepEnded);
       }
     } catch (e, stack) {
       debugPrint('[HomeSleep] Error ending sleep: $e');
@@ -696,6 +711,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
   /// Shows modal when overlap is detected with existing sessions
   /// Returns true if user chooses to replace, false/null otherwise
   Future<bool?> _showOverlapModal(List<SleepSession> overlappingSessions, String message) async {
+    final l10n = context.l10n;
     final sessionsStr = overlappingSessions.map((s) {
       final start = s.startEvent.timestamp.toLocal();
       final startStr = '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
@@ -704,7 +720,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
         final endStr = '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
         return '$startStr - $endStr';
       }
-      return 'desde $startStr (em curso)';
+      return l10n.ongoingSince(startStr);
     }).join('\n');
 
     return showModalBottomSheet<bool>(
@@ -713,7 +729,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => Padding(
+      builder: (ctx) => Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -737,10 +753,10 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
               children: [
                 Icon(Icons.warning_amber_rounded, color: Colors.orange.shade400, size: 28),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Text(
-                    'Já existe sono registado',
-                    style: TextStyle(
+                    l10n.overlapTitle,
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
                       color: NightTheme.textPrimary,
@@ -769,8 +785,8 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'O novo registo sobrepõe-se a este(s) sono(s). Queres substituir?',
-              style: TextStyle(
+              l10n.overlapMessage,
+              style: const TextStyle(
                 fontSize: 14,
                 color: NightTheme.textSecondary,
               ),
@@ -779,9 +795,9 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             
             // Replace button
             FilledButton.icon(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(ctx, true),
               icon: const Icon(Icons.swap_horiz),
-              label: const Text('Substituir sono existente'),
+              label: Text(l10n.overlapReplace),
               style: FilledButton.styleFrom(
                 backgroundColor: Colors.orange.shade600,
                 foregroundColor: Colors.white,
@@ -792,14 +808,14 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             
             // Cancel button
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(ctx, false),
               child: Text(
-                'Cancelar',
+                l10n.commonCancel,
                 style: TextStyle(color: NightTheme.textSecondary),
               ),
             ),
             
-            SizedBox(height: MediaQuery.of(context).padding.bottom),
+            SizedBox(height: MediaQuery.of(ctx).padding.bottom),
           ],
         ),
       ),
@@ -820,7 +836,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       debugPrint('[HomeSleep] Overwrite and create start successful');
       
       if (mounted) {
-        _showSuccessSnackBar('Sono substituído');
+        _showSuccessSnackBar(context.l10n.overlapReplaced);
       }
     } catch (e, stack) {
       debugPrint('[HomeSleep] Overwrite error: $e');
@@ -828,7 +844,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       if (mounted) {
         // FIX P5: Add retry to overwrite errors
         _showErrorSnackBar(
-          'Erro ao substituir: $e',
+          context.l10n.errorOverwriting(e.toString()),
           onRetry: () => _overwriteSessionsAndCreateStart(
             overlappingSessions: overlappingSessions,
             newStartTime: newStartTime,
@@ -857,7 +873,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       );
       debugPrint('[HomeSleep] Overwrite and create session successful');
       if (mounted) {
-        _showSuccessSnackBar('Sono substituído');
+        _showSuccessSnackBar(context.l10n.overlapReplaced);
       }
     } catch (e, stack) {
       debugPrint('[HomeSleep] Overwrite session error: $e');
@@ -865,7 +881,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
       if (mounted) {
         // FIX P5: Add retry to overwrite session errors
         _showErrorSnackBar(
-          'Erro ao substituir: $e',
+          context.l10n.errorOverwriting(e.toString()),
           onRetry: () => _overwriteSessionsAndCreateSession(
             overlappingSessions: overlappingSessions,
             newStartTime: newStartTime,
@@ -932,6 +948,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
   /// - "Ontem" always shown
   /// - "Outro dia…" opens a date picker
   Future<DateTime?> _showSmartDayPicker(TimeOfDay time) async {
+    final l10n = context.l10n;
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
@@ -970,9 +987,9 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             ),
             const SizedBox(height: 20),
             
-            const Text(
-              'Que dia?',
-              style: TextStyle(
+            Text(
+              l10n.whatDay,
+              style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: NightTheme.textPrimary,
@@ -980,8 +997,8 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Hora escolhida: $timeStr',
-              style: TextStyle(
+              l10n.chosenTime(timeStr),
+              style: const TextStyle(
                 fontSize: 14,
                 color: NightTheme.textSecondary,
               ),
@@ -1002,7 +1019,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Hoje às $timeStr ainda é futuro',
+                        l10n.todayIsFuture(timeStr),
                         style: TextStyle(
                           fontSize: 13,
                           color: Colors.orange.shade300,
@@ -1031,7 +1048,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
                       : null,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
-                child: const Text('Hoje'),
+                child: Text(l10n.dayToday),
               ),
             if (!isTodayFuture) const SizedBox(height: 12),
             
@@ -1050,7 +1067,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
                     : BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.3)),
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              child: const Text('Ontem'),
+              child: Text(l10n.dayYesterday),
             ),
             const SizedBox(height: 12),
             
@@ -1058,7 +1075,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             OutlinedButton.icon(
               onPressed: () => Navigator.pop(ctx, 'other'),
               icon: const Icon(Icons.calendar_today, size: 18),
-              label: const Text('Outro dia…'),
+              label: Text(l10n.otherDay),
               style: OutlinedButton.styleFrom(
                 foregroundColor: NightTheme.textPrimary,
                 side: BorderSide(color: NightTheme.textSecondary.withValues(alpha: 0.3)),
@@ -1071,7 +1088,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             TextButton(
               onPressed: () => Navigator.pop(ctx, null),
               child: Text(
-                'Cancelar',
+                l10n.commonCancel,
                 style: TextStyle(color: NightTheme.textSecondary),
               ),
             ),
@@ -1098,7 +1115,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
           initialDate: yesterday,
           firstDate: DateTime.now().subtract(const Duration(days: 365)),
           lastDate: now,
-          helpText: 'Escolher dia',
+          helpText: l10n.pickDay,
           builder: (context, child) {
             return Theme(
               data: Theme.of(context).copyWith(
@@ -1138,7 +1155,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     // Final validation: never allow future
     if (result.isAfter(now)) {
       if (mounted) {
-        _showErrorSnackBar('Não é possível registar sono no futuro');
+        _showErrorSnackBar(l10n.cannotRegisterFuture);
       }
       return null;
     }
@@ -1148,25 +1165,26 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
 
   /// Shows a warning dialog when user selects a time that doesn't exist due to DST
   Future<void> _showDstGapWarning(TimeOfDay selectedTime) async {
+    final l10n = context.l10n;
     final timeStr = '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}';
     
     await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: NightTheme.surface,
         icon: Icon(Icons.schedule, color: Colors.orange.shade400, size: 32),
-        title: const Text(
-          'Hora inválida',
-          style: TextStyle(color: NightTheme.textPrimary),
+        title: Text(
+          l10n.dstInvalidTime,
+          style: const TextStyle(color: NightTheme.textPrimary),
         ),
         content: Text(
-          'A hora $timeStr não existe neste dia devido à mudança de hora (DST).\n\nPor favor, escolhe outra hora.',
+          l10n.dstTimeNotExist(timeStr),
           style: const TextStyle(color: NightTheme.textSecondary),
         ),
         actions: [
           FilledButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(l10n.commonOk),
           ),
         ],
       ),
@@ -1175,21 +1193,22 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
 
   /// Bottom sheet para perguntar intenção: ainda a dormir vs sono completo
   Future<String?> _showPastTimeIntentSheet(DateTime pastTime) async {
+    final l10n = context.l10n;
     final timeStr = '${pastTime.hour.toString().padLeft(2, '0')}:${pastTime.minute.toString().padLeft(2, '0')}';
     final isYesterday = pastTime.day != DateTime.now().day;
-    final dayLabel = isYesterday ? 'ontem' : 'hoje';
+    final dayLabel = isYesterday ? l10n.dayYesterday.toLowerCase() : l10n.dayToday.toLowerCase();
     
     return showModalBottomSheet<String>(
       context: context,
       backgroundColor: NightTheme.surface,
-      builder: (context) => Container(
+      builder: (ctx) => Container(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'O que queres registar?',
+              l10n.whatToRegister,
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
@@ -1198,8 +1217,8 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Início: $dayLabel às $timeStr',
-              style: TextStyle(
+              l10n.startAtTime(dayLabel, timeStr),
+              style: const TextStyle(
                 fontSize: 14,
                 color: NightTheme.textSecondary,
               ),
@@ -1208,9 +1227,9 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             
             // Opção A: Ainda a dormir
             FilledButton.icon(
-              onPressed: () => Navigator.pop(context, 'still_sleeping'),
+              onPressed: () => Navigator.pop(ctx, 'still_sleeping'),
               icon: const Icon(Icons.bedtime),
-              label: const Text('Ainda está a dormir'),
+              label: Text(l10n.stillSleeping),
               style: FilledButton.styleFrom(
                 backgroundColor: NightTheme.primary,
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1220,9 +1239,9 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             
             // Opção B: Sono completo
             FilledButton.icon(
-              onPressed: () => Navigator.pop(context, 'complete'),
+              onPressed: () => Navigator.pop(ctx, 'complete'),
               icon: const Icon(Icons.check_circle),
-              label: const Text('Registar sono completo'),
+              label: Text(l10n.registerCompleteSleep),
               style: FilledButton.styleFrom(
                 backgroundColor: NightTheme.secondary,
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -1232,9 +1251,9 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
             
             // Cancelar
             TextButton(
-              onPressed: () => Navigator.pop(context, null),
+              onPressed: () => Navigator.pop(ctx, null),
               child: Text(
-                'Cancelar',
+                l10n.commonCancel,
                 style: TextStyle(color: NightTheme.textSecondary),
               ),
             ),
@@ -1323,7 +1342,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     
     // Validate start is not in future
     if (startTime.isAfter(now)) {
-      _showErrorSnackBar('A hora de início não pode estar no futuro');
+      _showErrorSnackBar(context.l10n.startCannotBeFuture);
       return;
     }
     debugPrint('[HomeSleep] Start: $startTime');
@@ -1393,7 +1412,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
     
     // Validar end > start
     if (!endTime.isAfter(startTime)) {
-      _showErrorSnackBar('A hora de fim deve ser depois da hora de início');
+      _showErrorSnackBar(context.l10n.editSleepEndAfterStart);
       return;
     }
     
@@ -1492,33 +1511,34 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
 
   /// Diálogo para confirmar que o sono atravessou meia-noite
   Future<bool?> _showCrossMidnightDialog(DateTime start, DateTime end) async {
+    final l10n = context.l10n;
     final startStr = '${start.hour.toString().padLeft(2, '0')}:${start.minute.toString().padLeft(2, '0')}';
     final endStr = '${end.hour.toString().padLeft(2, '0')}:${end.minute.toString().padLeft(2, '0')}';
     
     return showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: NightTheme.surface,
-        title: const Text(
-          'Atravessou meia-noite?',
-          style: TextStyle(color: NightTheme.textPrimary),
+        title: Text(
+          l10n.crossedMidnight,
+          style: const TextStyle(color: NightTheme.textPrimary),
         ),
         content: Text(
-          'Início às $startStr e fim às $endStr.\n\nO sono atravessou a meia-noite (dormiu ontem à noite, acordou hoje de manhã)?',
+          l10n.crossedMidnightQuestion(startStr, endStr),
           style: const TextStyle(color: NightTheme.textSecondary),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, null),
-            child: Text('Cancelar', style: TextStyle(color: NightTheme.textSecondary)),
+            onPressed: () => Navigator.pop(ctx, null),
+            child: Text(l10n.commonCancel, style: TextStyle(color: NightTheme.textSecondary)),
           ),
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Não, corrigir'),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(l10n.noCorrect),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Sim'),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(l10n.yes),
           ),
         ],
       ),
@@ -1527,26 +1547,27 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
 
   /// Diálogo para quando hora de fim está no futuro
   Future<DateTime?> _showFutureEndDialog(DateTime futureEnd) async {
+    final l10n = context.l10n;
     return showDialog<DateTime>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         backgroundColor: NightTheme.surface,
-        title: const Text(
-          'Hora de fim no futuro',
-          style: TextStyle(color: NightTheme.textPrimary),
+        title: Text(
+          l10n.endInFuture,
+          style: const TextStyle(color: NightTheme.textPrimary),
         ),
-        content: const Text(
-          'A hora de fim não pode estar no futuro.',
-          style: TextStyle(color: NightTheme.textSecondary),
+        content: Text(
+          l10n.endCannotBeFuture,
+          style: const TextStyle(color: NightTheme.textSecondary),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, null),
-            child: Text('Cancelar', style: TextStyle(color: NightTheme.textSecondary)),
+            onPressed: () => Navigator.pop(ctx, null),
+            child: Text(l10n.commonCancel, style: TextStyle(color: NightTheme.textSecondary)),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, DateTime.now()),
-            child: const Text('Usar agora'),
+            onPressed: () => Navigator.pop(ctx, DateTime.now()),
+            child: Text(l10n.useNow),
           ),
         ],
       ),
@@ -1556,26 +1577,27 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
   void _showSyncDetails() {
     final activeBaby = ref.read(activeBabyProvider);
     if (activeBaby == null) return;
+    final l10n = context.l10n;
     
     showModalBottomSheet(
       context: context,
-      builder: (context) => Container(
+      builder: (ctx) => Container(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Sincronização', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+            Text(l10n.syncTitle, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: FilledButton(
                 onPressed: () async {
-                  Navigator.pop(context);
+                  Navigator.pop(ctx);
                   await ref.read(syncProvider.notifier).syncNowForBaby(activeBaby.id);
                   await _ensureCaregiverContext();
                 },
-                child: const Text('Sincronizar agora'),
+                child: Text(l10n.syncNow),
               ),
             ),
           ],
@@ -1620,7 +1642,7 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
         duration: const Duration(seconds: 6),
         action: onRetry != null
             ? SnackBarAction(
-                label: 'Tentar',
+                label: context.l10n.commonRetry,
                 textColor: Colors.white,
                 onPressed: onRetry,
               )
@@ -1649,9 +1671,10 @@ class _PrimarySleepButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final color = isSleeping ? NightTheme.secondary : NightTheme.primary;
     final icon = isSleeping ? Icons.wb_sunny : Icons.bedtime;
-    final label = isSleeping ? 'Acordou' : 'Dormir Agora';
+    final label = isSleeping ? l10n.homeWakeUp : l10n.homeSleepNow;
     
     return Column(
       mainAxisSize: MainAxisSize.min,

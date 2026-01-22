@@ -161,6 +161,88 @@
   "@statsDaysRecorded": {
     "description": "Days with records label"
   },
+  
+  "statsPeriodDay": "Day",
+  "statsPeriod14Days": "14 days",
+  "statsPeriodCustom": "Custom",
+  "statsPeriodLabel": "Last {days} days",
+  "@statsPeriodLabel": {
+    "placeholders": { "days": { "type": "int" } }
+  },
+  "statsTypeAll": "All",
+  "statsTypeNight": "Night",
+  "statsTypeNaps": "Naps",
+  "statsCompare": "Compare",
+  "statsExport": "Export",
+  "statsBasedOnLocalData": "Based on local data",
+  "statsComparedWithPrevious": "compared with previous period",
+  
+  "statsDataQualityGood": "Good",
+  "statsDataQualityPartial": "Partial",
+  "statsDataQualityIncomplete": "Incomplete",
+  "statsDataQualityDetails": "See details",
+  "statsDataQualityTitle": "Data quality",
+  "statsDataQualityGoodDesc": "Complete and consistent data",
+  "statsDataQualityPartialDesc": "May be underestimated",
+  "statsDataQualityIncompleteDesc": "Insufficient data for accurate analysis",
+  "statsDataQualityIssueMissingDays": "{count} days without records",
+  "@statsDataQualityIssueMissingDays": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "statsDataQualityIssueOngoingLong": "Sleep ongoing for over 18h",
+  "statsDataQualityIssueImprobable": "{count} improbable durations",
+  "@statsDataQualityIssueImprobable": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "statsDataQualityIssueOverlaps": "{count} overlaps detected",
+  "@statsDataQualityIssueOverlaps": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "statsDataQualityActionReviewDay": "Review day",
+  "statsDataQualityActionEndSleep": "End sleep",
+  "statsDataQualityActionEditSession": "Edit session",
+  
+  "statsKpiMedianTotal": "Median/day",
+  "statsKpiNightVsNaps": "Night vs Naps",
+  "statsKpiLongestBlock": "Longest block",
+  "statsKpiFragmentation": "Fragmentation",
+  "statsKpiBedtimeConsistency": "Bedtime consistency",
+  "statsKpiEpisodesPerNight": "episodes/night",
+  "statsKpiNoEnoughData": "Not enough data",
+  
+  "statsChartTotalPerDay": "Total sleep per day",
+  "statsChartNightVsNaps": "Night vs Naps",
+  "statsChartBedtimeConsistency": "Bedtime",
+  "statsChartNapDistribution": "Nap distribution",
+  "statsChartNapShort": "<30m",
+  "statsChartNap30to60": "30-60m",
+  "statsChartNap60to90": "60-90m",
+  "statsChartNapLong": ">90m",
+  
+  "statsTimelineTitle": "Timeline",
+  "statsTimelineEmpty": "No records this day",
+  "statsTimelineIncomplete": "Incomplete data",
+  "statsTimelineOngoing": "Ongoing sleep",
+  "statsTimelineOverlap": "Overlap",
+  
+  "statsExportTitle": "Export data",
+  "statsExportPdf": "PDF",
+  "statsExportCsv": "CSV",
+  "statsExportPeriod7": "7 days",
+  "statsExportPeriod14": "14 days",
+  "statsExportPeriod30": "30 days",
+  "statsExportPeriodCustom": "Selected period",
+  "statsExportCsvSessions": "Sessions",
+  "statsExportCsvAggregates": "Daily aggregates",
+  "statsExportCsvBoth": "Both",
+  "statsExportIncludeName": "Include baby name",
+  "statsExportGenerate": "Generate and share",
+  "statsExportPreviewPdf": "Summary with KPIs, charts and timeline",
+  "statsExportPreviewCsv": "Tabular data for analysis",
+  
+  "statsEmptyState": "No sleep records yet",
+  "statsEmptyStateCta": "Go to Sleep",
+  "statsGoToSleep": "Register sleep",
 
   "relaxTitle": "Relax",
   "@relaxTitle": {
@@ -197,6 +279,48 @@
       "years": {"type": "int"}
     }
   },
+  "babiesPullGlobal": "Pull Babies (Global)",
+  "@babiesPullGlobal": {
+    "description": "Button to pull babies from server"
+  },
+  "babiesNew": "New",
+  "@babiesNew": {
+    "description": "Short new baby button"
+  },
+  "babiesErrorLoading": "Error loading babies",
+  "@babiesErrorLoading": {
+    "description": "Error when babies fail to load"
+  },
+  "babiesNameLabel": "Baby name",
+  "@babiesNameLabel": {
+    "description": "Label for baby name input"
+  },
+  "babiesNameHint": "e.g., Emma",
+  "@babiesNameHint": {
+    "description": "Hint for baby name input"
+  },
+  "babiesCreatedSuccess": "Baby \"{name}\" created",
+  "@babiesCreatedSuccess": {
+    "description": "Success message after creating baby",
+    "placeholders": {
+      "name": {"type": "String"}
+    }
+  },
+  "babiesCreatedError": "Failed to create baby: {error}",
+  "@babiesCreatedError": {
+    "description": "Error message when baby creation fails",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "menuLogout": "Logout",
+  "@menuLogout": {
+    "description": "Logout menu item"
+  },
+  "menuDebug": "Debug",
+  "@menuDebug": {
+    "description": "Debug menu item"
+  },
 
   "loginTitle": "Welcome",
   "@loginTitle": {
@@ -217,6 +341,22 @@
   "loginRegister": "Create account",
   "@loginRegister": {
     "description": "Register link"
+  },
+  "loginUseDifferentEmail": "Use a different email",
+  "@loginUseDifferentEmail": {
+    "description": "Link to retry with different email"
+  },
+  "loginInvalidEmail": "Please enter a valid email address",
+  "@loginInvalidEmail": {
+    "description": "Invalid email error"
+  },
+  "loginMagicLinkSent": "Magic link sent! Check your email and tap the link to sign in.",
+  "@loginMagicLinkSent": {
+    "description": "Success message after sending magic link"
+  },
+  "loginMagicLinkFailed": "Failed to send magic link. Please try again.",
+  "@loginMagicLinkFailed": {
+    "description": "Error message when magic link fails"
   },
 
   "commonCancel": "Cancel",
@@ -247,6 +387,10 @@
   "summaryTotalSleep": "Total sleep",
   "@summaryTotalSleep": {
     "description": "Total sleep label in summary"
+  },
+  "totalLabel": "total",
+  "@totalLabel": {
+    "description": "Total label for sleep summary"
   },
   "summaryNaps": "{count} naps",
   "@summaryNaps": {
@@ -327,6 +471,35 @@
   "editSleepEndAfterStart": "End time must be after start",
   "@editSleepEndAfterStart": {
     "description": "Validation error"
+  },
+  "editSleepSuccess": "Sleep edited",
+  "@editSleepSuccess": {
+    "description": "Success message after editing sleep"
+  },
+  "errorWithMessage": "Error: {message}",
+  "@errorWithMessage": {
+    "description": "Error message with detail",
+    "placeholders": {
+      "message": {"type": "String"}
+    }
+  },
+  "overlapOtherSleep": "Overlaps other sleep",
+  "@overlapOtherSleep": {
+    "description": "Overlap edit dialog title"
+  },
+  "overlapNewPeriodMessage": "The new period overlaps: {sessions}\n\nDo you want to replace?",
+  "@overlapNewPeriodMessage": {
+    "description": "Overlap edit message",
+    "placeholders": {
+      "sessions": {"type": "String"}
+    }
+  },
+  "sinceSomething": "since {time}",
+  "@sinceSomething": {
+    "description": "Label for since time",
+    "placeholders": {
+      "time": {"type": "String"}
+    }
   },
 
   "deleteSleepTitle": "Delete sleep?",
@@ -515,6 +688,44 @@
   "@syncNow": {
     "description": "Sync now button"
   },
+  "menuSwitchBaby": "Switch baby",
+  "@menuSwitchBaby": {
+    "description": "Menu option to switch baby"
+  },
+  "unknownTime": "unknown time",
+  "@unknownTime": {
+    "description": "Placeholder for unknown time"
+  },
+  "ongoingSince": "since {time} (ongoing)",
+  "@ongoingSince": {
+    "description": "Ongoing session label",
+    "placeholders": {
+      "time": {"type": "String"}
+    }
+  },
+  "overlapMessage": "The new record overlaps with existing sleep(s). Do you want to replace?",
+  "@overlapMessage": {
+    "description": "Overlap confirmation message"
+  },
+  "errorOverwriting": "Error replacing: {error}",
+  "@errorOverwriting": {
+    "description": "Error message when overwrite fails",
+    "placeholders": {
+      "error": {"type": "String"}
+    }
+  },
+  "pickDay": "Pick day",
+  "@pickDay": {
+    "description": "Date picker help text"
+  },
+  "noPermissionToCreate": "You don't have permission to create events.",
+  "@noPermissionToCreate": {
+    "description": "Error when user lacks permission"
+  },
+  "preparingPermissionsWait": "Preparing permissions. Please wait a moment.",
+  "@preparingPermissionsWait": {
+    "description": "Loading message for permissions"
+  },
 
   "monthJan": "Jan",
   "monthFeb": "Feb",
@@ -527,5 +738,213 @@
   "monthSep": "Sep",
   "monthOct": "Oct",
   "monthNov": "Nov",
-  "monthDec": "Dec"
+  "monthDec": "Dec",
+
+  "insightsTitle": "Insights",
+  "insightsHeaderToday": "Today",
+  "insightsHeaderBasedOn": "Based on {days} days",
+  "@insightsHeaderBasedOn": {
+    "placeholders": { "days": { "type": "int" } }
+  },
+  "insightsHeaderPatterns": "Detected patterns",
+  "insightsHeaderRoutine": "Suggested routine",
+  "insightsHeaderGuide": "Guide",
+  "insightsAddDob": "Add birth date",
+  "insightsAddDobBanner": "To personalize age-based insights, add the birth date",
+  "insightsAddNow": "Add now",
+  "@insightsAddNow": {
+    "description": "CTA to add birth date now"
+  },
+  "insightsMainPoint": "Main point",
+  "@insightsMainPoint": {
+    "description": "Main insight title"
+  },
+  "insightsNextStep": "Next step",
+  "@insightsNextStep": {
+    "description": "Next step action title"
+  },
+  "insightsSavedFavorites": "Saved to favorites",
+  "@insightsSavedFavorites": {
+    "description": "Snackbar when saved"
+  },
+  "insightsSuggestionLabel": "suggestion",
+  "@insightsSuggestionLabel": {
+    "description": "Suggestion badge label"
+  },
+  "insightsDefineDobForAge": "Add birth date for age-based suggestions.",
+  "@insightsDefineDobForAge": {
+    "description": "Hint to add dob for suggestions"
+  },
+  "insightsToSeePersonalized": "To see personalized insights.",
+  "@insightsToSeePersonalized": {
+    "description": "Subtitle when no baby selected"
+  },
+  "insightsNoRecordsYet": "No sleep records yet",
+  "@insightsNoRecordsYet": {
+    "description": "Empty state title"
+  },
+  "insightsRecordFirstSleep": "Record your first sleep in the \"Sleep\" tab to start seeing insights.",
+  "@insightsRecordFirstSleep": {
+    "description": "Empty state subtitle"
+  },
+  "insightsRegisterSleep": "Register sleep",
+  "@insightsRegisterSleep": {
+    "description": "CTA to register sleep"
+  },
+  "insightsCollectingPatterns": "Still collecting data to identify patterns.",
+  "@insightsCollectingPatterns": {
+    "description": "Patterns section empty state"
+  },
+  "insightsRegisterMoreNights": "Record a few more nights to receive personalized routine suggestions.",
+  "@insightsRegisterMoreNights": {
+    "description": "Routine empty state"
+  },
+  "insightsVsAvg7Days": "{diff} vs 7 day average",
+  "@insightsVsAvg7Days": {
+    "description": "Comparison with 7 day average",
+    "placeholders": {
+      "diff": {"type": "String"}
+    }
+  },
+  "insightsNoDobFallback": "General insights (no age band)",
+  "insightsLearning": "Still learning your baby's pattern",
+  "insightsMoreDataNeeded": "We need a few more days of data",
+  "insightsSourcesTitle": "Sources",
+  "insightsDisclaimerMedical": "This content is informational and does not replace medical advice.",
+
+  "insightSummary24hTitle": "24h summary",
+  "insightSummary24hBody": "Total sleep: {hours}h {minutes}m",
+  "@insightSummary24hBody": {
+    "placeholders": { "hours": { "type": "int" }, "minutes": { "type": "int" } }
+  },
+  "insightSummary24hVsAvg": "{sign}{minutes}m vs 7 day average",
+  "@insightSummary24hVsAvg": {
+    "placeholders": { "sign": { "type": "String" }, "minutes": { "type": "int" } }
+  },
+  "insightSummary24hNoData": "Not enough data yet",
+
+  "insightCurrentlySleepingTitle": "Sleeping",
+  "insightCurrentlySleepingBody": "Sleeping since {time}",
+  "@insightCurrentlySleepingBody": {
+    "placeholders": { "time": { "type": "String" } }
+  },
+
+  "insightSleepBelowExpectedTitle": "Sleep below expected",
+  "insightSleepBelowExpectedBody": "Sleep in the last 24h is slightly below recommended for this age.",
+  "insightSleepBelowExpectedWhy": "Compared to the typical range ({min}–{max}h).",
+  "@insightSleepBelowExpectedWhy": {
+    "placeholders": { "min": { "type": "int" }, "max": { "type": "int" } }
+  },
+
+  "insightSleepWithinExpectedTitle": "Sleep within expected",
+  "insightSleepWithinExpectedBody": "Sleep is within the recommended range for this age.",
+
+  "insightSleepAboveExpectedTitle": "Sleep above expected",
+  "insightSleepAboveExpectedBody": "Sleep is above the typical range. Usually not a concern.",
+
+  "insightBedtimeVariabilityHighTitle": "Variable bedtime",
+  "insightBedtimeVariabilityHighBody": "Bedtime varied by ±{minutes}min in recent days.",
+  "@insightBedtimeVariabilityHighBody": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+  "insightBedtimeVariabilityHighWhy": "Consistency in bedtime can help regulate sleep.",
+
+  "insightBedtimeConsistencyGoodTitle": "Good bedtime consistency",
+  "insightBedtimeConsistencyGoodBody": "Bedtime has been consistent. Keep it up!",
+
+  "insightNightFragmentationHighTitle": "Fragmented nights",
+  "insightNightFragmentationHighBody": "Nights have had multiple awakenings.",
+  "insightNightFragmentationHighWhy": "Average of {count} awakenings per night.",
+  "@insightNightFragmentationHighWhy": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+
+  "insightLargestBlockImprovingTitle": "Night block improving",
+  "insightLargestBlockImprovingBody": "The longest night sleep block is increasing.",
+
+  "insightTodayWasDifferentTitle": "Today was different",
+  "insightTodayWasDifferentBody": "Today's sleep differed significantly from the recent average.",
+
+  "insightAgeNorm0to3Title": "Variability is normal",
+  "insightAgeNorm0to3Body": "In the first months, it's normal for sleep to vary a lot day to day.",
+
+  "insightAgeNorm4to12Title": "Consolidation in progress",
+  "insightAgeNorm4to12Body": "At this stage, night sleep starts consolidating naturally.",
+
+  "insightAgeNorm12to24Title": "Testing limits is normal",
+  "insightAgeNorm12to24Body": "Resisting bedtime is common at this age. Stay calm!",
+
+  "insightSafeSleepBackToSleepTitle": "Safe sleep: on back",
+  "insightSafeSleepBackToSleepBody": "Remember: babies should always sleep on their back.",
+
+  "insightDayNightLowStimulusTitle": "Low stimulus at night",
+  "insightDayNightLowStimulusBody": "Calm interactions and low light at night help establish day vs night.",
+
+  "insightRoutineShortConsistentTitle": "Short consistent routine",
+  "insightRoutineShortConsistentBody": "A simple 2–4 step routine before bed can help.",
+
+  "insightWhenCallPediatricianTitle": "When to contact the pediatrician",
+  "insightWhenCallPediatricianBody": "If something concerns you, don't hesitate to consult the doctor.",
+
+  "insightFewDataLearningTitle": "Still learning",
+  "insightFewDataLearningBody": "We need a few more days of data to generate personalized insights.",
+
+  "insightCtaLearnMore": "Learn more",
+  "insightCtaSave": "Save",
+  "insightCtaCheckGuide": "Check guide",
+  "insightCtaOpenGuide": "Open guide",
+  "insightCtaTryThis": "Try this",
+  "insightCtaWhyThis": "Why this?",
+  "insightCtaDismiss": "Dismiss",
+
+  "routineSuggestionTitle": "Routine suggestion",
+  "routineNextNap": "Next nap",
+  "routineNextNapWindow": "Window: {start}–{end}",
+  "@routineNextNapWindow": {
+    "placeholders": { "start": { "type": "String" }, "end": { "type": "String" } }
+  },
+  "routineNextNapSuggested": "Suggested: {time}",
+  "@routineNextNapSuggested": {
+    "placeholders": { "time": { "type": "String" } }
+  },
+  "routineBedtime": "Bedtime",
+  "routineBedtimeWindow": "Window: {start}–{end}",
+  "@routineBedtimeWindow": {
+    "placeholders": { "start": { "type": "String" }, "end": { "type": "String" } }
+  },
+  "routineBedtimeSuggested": "Suggested: {time}",
+  "@routineBedtimeSuggested": {
+    "placeholders": { "time": { "type": "String" } }
+  },
+  "routineNoData": "Not enough data to suggest yet",
+  "routineCurrentlySleeping": "Sleeping — rest well!",
+  "routineNapWindowPassed": "The nap window has passed",
+  "routineExplanation": "Based on recent patterns",
+  "routineNapCount": "{count} naps expected",
+  "@routineNapCount": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "routineNapDuration": "~{minutes}min each",
+  "@routineNapDuration": {
+    "placeholders": { "minutes": { "type": "int" } }
+  },
+
+  "guide_normal_por_idade_title": "What's normal by age",
+  "guide_normal_por_idade_subtitle": "Sleep expectations 0–24 months",
+
+  "guide_dia_vs_noite_title": "Day vs Night",
+  "guide_dia_vs_noite_subtitle": "How to help the circadian rhythm",
+
+  "guide_rotina_antes_dormir_title": "Bedtime routine",
+  "guide_rotina_antes_dormir_subtitle": "Simple steps to help",
+
+  "guide_sono_seguro_title": "Safe sleep",
+  "guide_sono_seguro_subtitle": "Recommended practices",
+
+  "guide_quando_pediatra_title": "When to talk to the pediatrician",
+  "guide_quando_pediatra_subtitle": "Warning signs",
+
+  "guideOpenSection": "Open",
+  "guideBackToList": "Back",
+  "guideDisclaimer": "This content is informational and does not replace personalized medical advice."
 }

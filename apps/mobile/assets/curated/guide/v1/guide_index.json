@@ -1,0 +1,50 @@
+{
+  "version": "1.0.0",
+  "sections": [
+    {
+      "id": "normal_por_idade",
+      "titleKey": "guide_normal_por_idade_title",
+      "subtitleKey": "guide_normal_por_idade_subtitle",
+      "icon": "child_care",
+      "order": 1,
+      "hasAgeVariants": true,
+      "sources": ["AASM", "AAP"]
+    },
+    {
+      "id": "dia_vs_noite",
+      "titleKey": "guide_dia_vs_noite_title",
+      "subtitleKey": "guide_dia_vs_noite_subtitle",
+      "icon": "brightness_4",
+      "order": 2,
+      "hasAgeVariants": false,
+      "sources": ["NHS"]
+    },
+    {
+      "id": "rotina_antes_dormir",
+      "titleKey": "guide_rotina_antes_dormir_title",
+      "subtitleKey": "guide_rotina_antes_dormir_subtitle",
+      "icon": "format_list_numbered",
+      "order": 3,
+      "hasAgeVariants": false,
+      "sources": ["AAP", "NHS"]
+    },
+    {
+      "id": "sono_seguro",
+      "titleKey": "guide_sono_seguro_title",
+      "subtitleKey": "guide_sono_seguro_subtitle",
+      "icon": "verified_user",
+      "order": 4,
+      "hasAgeVariants": false,
+      "sources": ["AAP_safe_sleep", "CDC_safe_sleep", "NHS_safe_sleep"]
+    },
+    {
+      "id": "quando_pediatra",
+      "titleKey": "guide_quando_pediatra_title",
+      "subtitleKey": "guide_quando_pediatra_subtitle",
+      "icon": "medical_services_outlined",
+      "order": 5,
+      "hasAgeVariants": false,
+      "sources": ["AAP", "NHS"]
+    }
+  ]
+}

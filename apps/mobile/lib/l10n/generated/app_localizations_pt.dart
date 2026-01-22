@@ -120,6 +120,204 @@ class AppLocalizationsPt extends AppLocalizations {
   String get statsDaysRecorded => 'Dias registados';
 
   @override
+  String get statsPeriodDay => 'Dia';
+
+  @override
+  String get statsPeriod14Days => '14 dias';
+
+  @override
+  String get statsPeriodCustom => 'Custom';
+
+  @override
+  String statsPeriodLabel(int days) {
+    return 'Últimos $days dias';
+  }
+
+  @override
+  String get statsTypeAll => 'Tudo';
+
+  @override
+  String get statsTypeNight => 'Noite';
+
+  @override
+  String get statsTypeNaps => 'Sestas';
+
+  @override
+  String get statsCompare => 'Comparar';
+
+  @override
+  String get statsExport => 'Exportar';
+
+  @override
+  String get statsBasedOnLocalData => 'Baseado em dados locais';
+
+  @override
+  String get statsComparedWithPrevious => 'comparado com período anterior';
+
+  @override
+  String get statsDataQualityGood => 'Boa';
+
+  @override
+  String get statsDataQualityPartial => 'Parcial';
+
+  @override
+  String get statsDataQualityIncomplete => 'Incompleta';
+
+  @override
+  String get statsDataQualityDetails => 'Ver detalhes';
+
+  @override
+  String get statsDataQualityTitle => 'Qualidade dos dados';
+
+  @override
+  String get statsDataQualityGoodDesc => 'Dados completos e consistentes';
+
+  @override
+  String get statsDataQualityPartialDesc => 'Pode haver subestimação';
+
+  @override
+  String get statsDataQualityIncompleteDesc =>
+      'Dados insuficientes para análise precisa';
+
+  @override
+  String statsDataQualityIssueMissingDays(int count) {
+    return '$count dias sem registos';
+  }
+
+  @override
+  String get statsDataQualityIssueOngoingLong => 'Sono em curso há mais de 18h';
+
+  @override
+  String statsDataQualityIssueImprobable(int count) {
+    return '$count durações improváveis';
+  }
+
+  @override
+  String statsDataQualityIssueOverlaps(int count) {
+    return '$count sobreposições detetadas';
+  }
+
+  @override
+  String get statsDataQualityActionReviewDay => 'Rever dia';
+
+  @override
+  String get statsDataQualityActionEndSleep => 'Terminar sono';
+
+  @override
+  String get statsDataQualityActionEditSession => 'Editar sessão';
+
+  @override
+  String get statsKpiMedianTotal => 'Mediana/dia';
+
+  @override
+  String get statsKpiNightVsNaps => 'Noite vs Sestas';
+
+  @override
+  String get statsKpiLongestBlock => 'Maior bloco';
+
+  @override
+  String get statsKpiFragmentation => 'Fragmentação';
+
+  @override
+  String get statsKpiBedtimeConsistency => 'Consistência hora deitar';
+
+  @override
+  String get statsKpiEpisodesPerNight => 'episódios/noite';
+
+  @override
+  String get statsKpiNoEnoughData => 'Dados insuficientes';
+
+  @override
+  String get statsChartTotalPerDay => 'Total de sono por dia';
+
+  @override
+  String get statsChartNightVsNaps => 'Noite vs Sestas';
+
+  @override
+  String get statsChartBedtimeConsistency => 'Hora de deitar';
+
+  @override
+  String get statsChartNapDistribution => 'Distribuição das sestas';
+
+  @override
+  String get statsChartNapShort => '<30m';
+
+  @override
+  String get statsChartNap30to60 => '30-60m';
+
+  @override
+  String get statsChartNap60to90 => '60-90m';
+
+  @override
+  String get statsChartNapLong => '>90m';
+
+  @override
+  String get statsTimelineTitle => 'Timeline';
+
+  @override
+  String get statsTimelineEmpty => 'Sem registos neste dia';
+
+  @override
+  String get statsTimelineIncomplete => 'Dados incompletos';
+
+  @override
+  String get statsTimelineOngoing => 'Sono em curso';
+
+  @override
+  String get statsTimelineOverlap => 'Sobreposição';
+
+  @override
+  String get statsExportTitle => 'Exportar dados';
+
+  @override
+  String get statsExportPdf => 'PDF';
+
+  @override
+  String get statsExportCsv => 'CSV';
+
+  @override
+  String get statsExportPeriod7 => '7 dias';
+
+  @override
+  String get statsExportPeriod14 => '14 dias';
+
+  @override
+  String get statsExportPeriod30 => '30 dias';
+
+  @override
+  String get statsExportPeriodCustom => 'Período selecionado';
+
+  @override
+  String get statsExportCsvSessions => 'Sessões';
+
+  @override
+  String get statsExportCsvAggregates => 'Agregados diários';
+
+  @override
+  String get statsExportCsvBoth => 'Ambos';
+
+  @override
+  String get statsExportIncludeName => 'Incluir nome do bebé';
+
+  @override
+  String get statsExportGenerate => 'Gerar e partilhar';
+
+  @override
+  String get statsExportPreviewPdf => 'Resumo com KPIs, gráficos e timeline';
+
+  @override
+  String get statsExportPreviewCsv => 'Dados em formato tabular para análise';
+
+  @override
+  String get statsEmptyState => 'Ainda sem registos de sono';
+
+  @override
+  String get statsEmptyStateCta => 'Ir para Sono';
+
+  @override
+  String get statsGoToSleep => 'Registar sono';
+
+  @override
   String get relaxTitle => 'Relaxar';
 
   @override
@@ -145,6 +343,37 @@ class AppLocalizationsPt extends AppLocalizations {
   }
 
   @override
+  String get babiesPullGlobal => 'Puxar bebés (Global)';
+
+  @override
+  String get babiesNew => 'Novo';
+
+  @override
+  String get babiesErrorLoading => 'Erro ao carregar bebés';
+
+  @override
+  String get babiesNameLabel => 'Nome do bebé';
+
+  @override
+  String get babiesNameHint => 'ex.: Maria';
+
+  @override
+  String babiesCreatedSuccess(String name) {
+    return 'Bebé \"$name\" criado';
+  }
+
+  @override
+  String babiesCreatedError(String error) {
+    return 'Falha ao criar bebé: $error';
+  }
+
+  @override
+  String get menuLogout => 'Sair';
+
+  @override
+  String get menuDebug => 'Debug';
+
+  @override
   String get loginTitle => 'Bem-vindo';
 
   @override
@@ -158,6 +387,20 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get loginRegister => 'Criar conta';
+
+  @override
+  String get loginUseDifferentEmail => 'Usar outro email';
+
+  @override
+  String get loginInvalidEmail => 'Por favor, insere um email válido';
+
+  @override
+  String get loginMagicLinkSent =>
+      'Link mágico enviado! Verifica o teu email e clica no link para entrar.';
+
+  @override
+  String get loginMagicLinkFailed =>
+      'Falha ao enviar o link. Por favor, tenta novamente.';
 
   @override
   String get commonCancel => 'Cancelar';
@@ -179,6 +422,9 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get summaryTotalSleep => 'Sono total';
+
+  @override
+  String get totalLabel => 'total';
 
   @override
   String summaryNaps(int count) {
@@ -235,6 +481,27 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get editSleepEndAfterStart =>
       'A hora de fim deve ser depois do início';
+
+  @override
+  String get editSleepSuccess => 'Sono editado';
+
+  @override
+  String errorWithMessage(String message) {
+    return 'Erro: $message';
+  }
+
+  @override
+  String get overlapOtherSleep => 'Sobrepõe outro sono';
+
+  @override
+  String overlapNewPeriodMessage(String sessions) {
+    return 'O novo período sobrepõe: $sessions\n\nQueres substituir?';
+  }
+
+  @override
+  String sinceSomething(String time) {
+    return 'desde $time';
+  }
 
   @override
   String get deleteSleepTitle => 'Eliminar sono?';
@@ -365,6 +632,36 @@ class AppLocalizationsPt extends AppLocalizations {
   String get syncNow => 'Sincronizar agora';
 
   @override
+  String get menuSwitchBaby => 'Mudar bebé';
+
+  @override
+  String get unknownTime => 'hora desconhecida';
+
+  @override
+  String ongoingSince(String time) {
+    return 'desde $time (em curso)';
+  }
+
+  @override
+  String get overlapMessage =>
+      'O novo registo sobrepõe-se a este(s) sono(s). Queres substituir?';
+
+  @override
+  String errorOverwriting(String error) {
+    return 'Erro ao substituir: $error';
+  }
+
+  @override
+  String get pickDay => 'Escolher dia';
+
+  @override
+  String get noPermissionToCreate => 'Não tens permissão para criar eventos.';
+
+  @override
+  String get preparingPermissionsWait =>
+      'A preparar permissões. Aguarda um momento.';
+
+  @override
   String get monthJan => 'Jan';
 
   @override
@@ -399,4 +696,357 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get monthDec => 'Dez';
+
+  @override
+  String get insightsTitle => 'Insights';
+
+  @override
+  String get insightsHeaderToday => 'Hoje';
+
+  @override
+  String insightsHeaderBasedOn(int days) {
+    return 'Baseado em $days dias';
+  }
+
+  @override
+  String get insightsHeaderPatterns => 'Padrões detetados';
+
+  @override
+  String get insightsHeaderRoutine => 'Rotina sugerida';
+
+  @override
+  String get insightsHeaderGuide => 'Guia';
+
+  @override
+  String get insightsAddDob => 'Adicionar data de nascimento';
+
+  @override
+  String get insightsAddDobBanner =>
+      'Para personalizar insights por idade, adiciona a data de nascimento';
+
+  @override
+  String get insightsAddNow => 'Adicionar agora';
+
+  @override
+  String get insightsMainPoint => 'Ponto principal';
+
+  @override
+  String get insightsNextStep => 'Próximo passo';
+
+  @override
+  String get insightsSavedFavorites => 'Guardado nos favoritos';
+
+  @override
+  String get insightsSuggestionLabel => 'sugestão';
+
+  @override
+  String get insightsDefineDobForAge =>
+      'Define a data de nascimento para sugestões por idade.';
+
+  @override
+  String get insightsToSeePersonalized => 'Para ver insights personalizados.';
+
+  @override
+  String get insightsNoRecordsYet => 'Ainda não há registos de sono';
+
+  @override
+  String get insightsRecordFirstSleep =>
+      'Regista o primeiro sono na aba \"Sono\" para começar a ver insights.';
+
+  @override
+  String get insightsRegisterSleep => 'Registar sono';
+
+  @override
+  String get insightsCollectingPatterns =>
+      'Ainda a recolher dados para identificar padrões.';
+
+  @override
+  String get insightsRegisterMoreNights =>
+      'Regista mais algumas noites para receber sugestões de rotina personalizadas.';
+
+  @override
+  String insightsVsAvg7Days(String diff) {
+    return '$diff vs média 7 dias';
+  }
+
+  @override
+  String get insightsNoDobFallback => 'Insights gerais (sem faixa etária)';
+
+  @override
+  String get insightsLearning => 'Ainda a aprender o padrão do teu bebé';
+
+  @override
+  String get insightsMoreDataNeeded =>
+      'Precisamos de mais alguns dias de dados';
+
+  @override
+  String get insightsSourcesTitle => 'Fontes';
+
+  @override
+  String get insightsDisclaimerMedical =>
+      'Este conteúdo é informativo e não substitui aconselhamento médico.';
+
+  @override
+  String get insightSummary24hTitle => 'Resumo 24h';
+
+  @override
+  String insightSummary24hBody(int hours, int minutes) {
+    return 'Sono total: ${hours}h ${minutes}m';
+  }
+
+  @override
+  String insightSummary24hVsAvg(String sign, int minutes) {
+    return '$sign${minutes}m vs média 7 dias';
+  }
+
+  @override
+  String get insightSummary24hNoData => 'Ainda sem dados suficientes';
+
+  @override
+  String get insightCurrentlySleepingTitle => 'A dormir';
+
+  @override
+  String insightCurrentlySleepingBody(String time) {
+    return 'A dormir desde $time';
+  }
+
+  @override
+  String get insightSleepBelowExpectedTitle => 'Sono abaixo do esperado';
+
+  @override
+  String get insightSleepBelowExpectedBody =>
+      'O sono nas últimas 24h está ligeiramente abaixo do recomendado para a idade.';
+
+  @override
+  String insightSleepBelowExpectedWhy(int min, int max) {
+    return 'Comparado com o intervalo típico ($min–${max}h).';
+  }
+
+  @override
+  String get insightSleepWithinExpectedTitle => 'Sono dentro do esperado';
+
+  @override
+  String get insightSleepWithinExpectedBody =>
+      'O sono está dentro do intervalo recomendado para esta idade.';
+
+  @override
+  String get insightSleepAboveExpectedTitle => 'Sono acima do esperado';
+
+  @override
+  String get insightSleepAboveExpectedBody =>
+      'O sono está acima do intervalo típico. Geralmente não é preocupante.';
+
+  @override
+  String get insightBedtimeVariabilityHighTitle => 'Horário de deitar variável';
+
+  @override
+  String insightBedtimeVariabilityHighBody(int minutes) {
+    return 'O horário de deitar variou ±${minutes}min nos últimos dias.';
+  }
+
+  @override
+  String get insightBedtimeVariabilityHighWhy =>
+      'Consistência no horário pode ajudar a regular o sono.';
+
+  @override
+  String get insightBedtimeConsistencyGoodTitle => 'Boa consistência no deitar';
+
+  @override
+  String get insightBedtimeConsistencyGoodBody =>
+      'O horário de deitar tem sido consistente. Continua assim!';
+
+  @override
+  String get insightNightFragmentationHighTitle => 'Noites fragmentadas';
+
+  @override
+  String get insightNightFragmentationHighBody =>
+      'As noites têm tido vários despertares.';
+
+  @override
+  String insightNightFragmentationHighWhy(int count) {
+    return 'Média de $count despertares por noite.';
+  }
+
+  @override
+  String get insightLargestBlockImprovingTitle => 'Bloco noturno a melhorar';
+
+  @override
+  String get insightLargestBlockImprovingBody =>
+      'O maior bloco de sono noturno está a aumentar.';
+
+  @override
+  String get insightTodayWasDifferentTitle => 'Hoje foi diferente';
+
+  @override
+  String get insightTodayWasDifferentBody =>
+      'O sono de hoje diferiu significativamente da média recente.';
+
+  @override
+  String get insightAgeNorm0to3Title => 'Variabilidade é normal';
+
+  @override
+  String get insightAgeNorm0to3Body =>
+      'Nos primeiros meses, é normal o sono variar muito de dia para dia.';
+
+  @override
+  String get insightAgeNorm4to12Title => 'Consolidação em curso';
+
+  @override
+  String get insightAgeNorm4to12Body =>
+      'Nesta fase, o sono noturno começa a consolidar-se naturalmente.';
+
+  @override
+  String get insightAgeNorm12to24Title => 'Testar limites é normal';
+
+  @override
+  String get insightAgeNorm12to24Body =>
+      'Resistir à hora de deitar é comum nesta idade. Mantém a calma!';
+
+  @override
+  String get insightSafeSleepBackToSleepTitle => 'Sono seguro: de costas';
+
+  @override
+  String get insightSafeSleepBackToSleepBody =>
+      'Lembra: bebés devem dormir sempre de costas.';
+
+  @override
+  String get insightDayNightLowStimulusTitle => 'Estímulos baixos à noite';
+
+  @override
+  String get insightDayNightLowStimulusBody =>
+      'Interações calmas e luz baixa à noite ajudam a estabelecer dia vs noite.';
+
+  @override
+  String get insightRoutineShortConsistentTitle => 'Rotina curta e consistente';
+
+  @override
+  String get insightRoutineShortConsistentBody =>
+      'Uma rotina simples de 2–4 passos antes de dormir pode ajudar.';
+
+  @override
+  String get insightWhenCallPediatricianTitle => 'Quando contactar o pediatra';
+
+  @override
+  String get insightWhenCallPediatricianBody =>
+      'Se algo te preocupa, não hesites em consultar o médico.';
+
+  @override
+  String get insightFewDataLearningTitle => 'Ainda a aprender';
+
+  @override
+  String get insightFewDataLearningBody =>
+      'Precisamos de mais alguns dias de dados para gerar insights personalizados.';
+
+  @override
+  String get insightCtaLearnMore => 'Saber mais';
+
+  @override
+  String get insightCtaSave => 'Guardar';
+
+  @override
+  String get insightCtaCheckGuide => 'Ver guia';
+
+  @override
+  String get insightCtaOpenGuide => 'Abrir guia';
+
+  @override
+  String get insightCtaTryThis => 'Experimentar isto';
+
+  @override
+  String get insightCtaWhyThis => 'Porquê isto?';
+
+  @override
+  String get insightCtaDismiss => 'Dispensar';
+
+  @override
+  String get routineSuggestionTitle => 'Sugestão de rotina';
+
+  @override
+  String get routineNextNap => 'Próxima sesta';
+
+  @override
+  String routineNextNapWindow(String start, String end) {
+    return 'Janela: $start–$end';
+  }
+
+  @override
+  String routineNextNapSuggested(String time) {
+    return 'Sugerido: $time';
+  }
+
+  @override
+  String get routineBedtime => 'Hora de deitar';
+
+  @override
+  String routineBedtimeWindow(String start, String end) {
+    return 'Janela: $start–$end';
+  }
+
+  @override
+  String routineBedtimeSuggested(String time) {
+    return 'Sugerido: $time';
+  }
+
+  @override
+  String get routineNoData => 'Ainda sem dados suficientes para sugerir';
+
+  @override
+  String get routineCurrentlySleeping => 'A dormir — bom descanso!';
+
+  @override
+  String get routineNapWindowPassed => 'A janela de sesta já passou';
+
+  @override
+  String get routineExplanation => 'Baseado nos padrões recentes';
+
+  @override
+  String routineNapCount(int count) {
+    return '$count sestas esperadas';
+  }
+
+  @override
+  String routineNapDuration(int minutes) {
+    return '~${minutes}min cada';
+  }
+
+  @override
+  String get guide_normal_por_idade_title => 'O que é normal por idade';
+
+  @override
+  String get guide_normal_por_idade_subtitle =>
+      'Expectativas de sono 0–24 meses';
+
+  @override
+  String get guide_dia_vs_noite_title => 'Dia vs Noite';
+
+  @override
+  String get guide_dia_vs_noite_subtitle => 'Como ajudar o ritmo circadiano';
+
+  @override
+  String get guide_rotina_antes_dormir_title => 'Rotina antes de dormir';
+
+  @override
+  String get guide_rotina_antes_dormir_subtitle => 'Passos simples para ajudar';
+
+  @override
+  String get guide_sono_seguro_title => 'Sono seguro';
+
+  @override
+  String get guide_sono_seguro_subtitle => 'Práticas recomendadas';
+
+  @override
+  String get guide_quando_pediatra_title => 'Quando falar com o pediatra';
+
+  @override
+  String get guide_quando_pediatra_subtitle => 'Sinais de atenção';
+
+  @override
+  String get guideOpenSection => 'Abrir';
+
+  @override
+  String get guideBackToList => 'Voltar';
+
+  @override
+  String get guideDisclaimer =>
+      'Este conteúdo é informativo e não substitui aconselhamento médico personalizado.';
 }

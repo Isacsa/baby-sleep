@@ -161,7 +161,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         _message = null;
                       });
                     },
-                    child: const Text('Use a different email'),
+                    child: Text(context.l10n.loginUseDifferentEmail),
                   ),
                 ],
               ],
@@ -173,10 +173,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   }
 
   Future<void> _sendMagicLink() async {
+    final l10n = context.l10n;
     final email = _emailController.text.trim();
     if (email.isEmpty || !email.contains('@')) {
       setState(() {
-        _message = 'Please enter a valid email address';
+        _message = l10n.loginInvalidEmail;
         _linkSent = false;
       });
       return;
@@ -192,13 +193,13 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       setState(() {
         _isLoading = false;
         _linkSent = true;
-        _message = 'Magic link sent! Check your email and tap the link to sign in.';
+        _message = l10n.loginMagicLinkSent;
       });
     } catch (e) {
       setState(() {
         _isLoading = false;
         _linkSent = false;
-        _message = 'Failed to send magic link. Please try again.';
+        _message = l10n.loginMagicLinkFailed;
       });
     }
   }

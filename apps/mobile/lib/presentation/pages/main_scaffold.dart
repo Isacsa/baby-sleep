@@ -8,9 +8,9 @@ import 'package:temp_flutter/domain/entities/baby.dart';
 import 'package:temp_flutter/presentation/widgets/starry_background.dart';
 import 'package:temp_flutter/presentation/widgets/floating_bottom_bar.dart';
 import 'package:temp_flutter/presentation/pages/home_sleep_page.dart';
-import 'package:temp_flutter/presentation/pages/insights_page.dart';
+import 'package:temp_flutter/presentation/pages/insights_page_v2.dart';
 import 'package:temp_flutter/presentation/pages/relax_page.dart';
-import 'package:temp_flutter/presentation/pages/stats_page.dart';
+import 'package:temp_flutter/presentation/pages/stats_page_v2.dart';
 
 /// MainScaffold - Container principal com navegação por tabs
 /// 
@@ -46,9 +46,9 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
 
   final List<Widget> _pages = const [
     HomeSleepPage(),
-    InsightsPage(),
+    InsightsPageV2(),
     RelaxPage(),
-    StatsPage(),
+    StatsPageV2(),
   ];
 
   @override

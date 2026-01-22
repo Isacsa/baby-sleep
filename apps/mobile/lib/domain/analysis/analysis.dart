@@ -6,12 +6,16 @@
 /// - Metrics calculation from session data
 /// - Insight generation (empathetic, explainable)
 /// - Routine suggestions (wake windows)
-library analysis;
+library;
 
 export 'age_band.dart';
 export 'insight_cards_catalog.dart';
+export 'insight_render_model.dart';
+export 'insight_rules/insight_rule.dart';
+export 'insight_rules/sleep_insight_rules.dart';
 export 'sleep_expectations.dart';
-export 'sleep_insight.dart';
+// Hide InsightCtaAction from sleep_insight.dart to avoid conflict with insight_render_model.dart
+export 'sleep_insight.dart' hide InsightCtaAction;
 export 'sleep_insight_engine.dart';
 export 'sleep_metrics.dart';
 export 'sleep_metrics_calculator.dart';
