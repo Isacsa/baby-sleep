@@ -323,6 +323,162 @@ class AppLocalizationsEn extends AppLocalizations {
   String get relaxComingSoon => 'Coming soon';
 
   @override
+  String get relaxModeNow => 'Now Mode';
+
+  @override
+  String get relaxNightMode => 'Night mode';
+
+  @override
+  String get relaxNightModeBadge => 'Night';
+
+  @override
+  String get relaxSounds => 'Sounds';
+
+  @override
+  String get relaxQuickGuides => 'Quick guides';
+
+  @override
+  String get relaxSleepShortcuts => 'Sleep shortcuts';
+
+  @override
+  String get relaxSoundWhiteNoise => 'White Noise';
+
+  @override
+  String get relaxSoundRain => 'Rain';
+
+  @override
+  String get relaxSoundFan => 'Fan';
+
+  @override
+  String get relaxSoundShush => 'Shushing';
+
+  @override
+  String get relaxPlay => 'Play';
+
+  @override
+  String get relaxPause => 'Pause';
+
+  @override
+  String get relaxStop => 'Stop';
+
+  @override
+  String get relaxResume => 'Resume';
+
+  @override
+  String get relaxVolume => 'Volume';
+
+  @override
+  String get relaxVolumeLow => 'low';
+
+  @override
+  String get relaxVolumeHigh => 'high';
+
+  @override
+  String get relaxVolumeHighWarning =>
+      'If the indicator is in the high zone, consider lowering the volume.';
+
+  @override
+  String get relaxVolumeSafetyTip =>
+      'Low volume and device away from the crib.';
+
+  @override
+  String get relaxTimer => 'Timer';
+
+  @override
+  String get relaxTimerInfinite => '∞';
+
+  @override
+  String relaxTimerMinutes(int minutes) {
+    return '${minutes}min';
+  }
+
+  @override
+  String get relaxFadeOut => 'Fade-out';
+
+  @override
+  String get relaxFadeOutEnabled => 'enabled';
+
+  @override
+  String get relaxFadeOutDisabled => 'disabled';
+
+  @override
+  String get relaxDarkScreen => 'Dark screen';
+
+  @override
+  String get relaxSaveConfig => 'Save configuration';
+
+  @override
+  String get relaxFavorites => 'Favorites';
+
+  @override
+  String get relaxNoFavorites => 'No favorites yet';
+
+  @override
+  String get relaxFavoriteSaved => 'Configuration saved to favorites';
+
+  @override
+  String get relaxFavoriteRemoved => 'Removed from favorites';
+
+  @override
+  String get relaxSafetyChecklist => 'Safe sleep checklist';
+
+  @override
+  String get relaxSafetyChecklistShort => 'Checklist (10s)';
+
+  @override
+  String get relaxBreathing60s => 'Breathing 60s';
+
+  @override
+  String get relaxGoToSleep => 'Go to Sleep';
+
+  @override
+  String get relaxStartSleep => 'Start sleep';
+
+  @override
+  String get relaxEndSleep => 'End sleep';
+
+  @override
+  String get relaxSleepOngoing => 'Sleep ongoing';
+
+  @override
+  String get relaxAwake => 'Awake';
+
+  @override
+  String get relaxAudioUnavailable =>
+      'Audio unavailable on this device. Continue using the guides below.';
+
+  @override
+  String get relaxAudioError => 'Could not start audio.';
+
+  @override
+  String get relaxTryAgain => 'Try again';
+
+  @override
+  String get relaxHelp => 'Help';
+
+  @override
+  String get relaxInterrupted => 'Playback interrupted';
+
+  @override
+  String get relaxBackgroundWarning =>
+      'In background, sound may stop on this device. Keep the app open to continue.';
+
+  @override
+  String get relaxDisclaimer =>
+      'This is practical and safe support. It doesn\'t guarantee sleep. If you have medical concerns, talk to a professional.';
+
+  @override
+  String get relaxSofaWarning =>
+      'Avoid falling asleep with the baby on the sofa/armchair — this is one of the highest risk scenarios.';
+
+  @override
+  String get relaxSafetyNote =>
+      'If you\'re feeling sleepy, put the baby in a safe place.';
+
+  @override
+  String get relaxSources => 'Sources: AAP/CDC/NHS.';
+
+  @override
   String get babiesTitle => 'Babies';
 
   @override

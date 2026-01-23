@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:temp_flutter/application/providers/active_baby_provider.dart';
 import 'package:temp_flutter/application/providers/auth_provider.dart';
+import 'package:temp_flutter/application/providers/navigation_provider.dart';
 import 'package:temp_flutter/application/providers/sync_provider.dart';
 import 'package:temp_flutter/core/l10n/l10n.dart';
 import 'package:temp_flutter/domain/entities/baby.dart';
@@ -146,6 +147,15 @@ class _MainScaffoldState extends ConsumerState<MainScaffold>
 
   @override
   Widget build(BuildContext context) {
+    // Listen to tab navigation requests from child widgets
+    ref.listen<int?>(requestedTabIndexProvider, (previous, next) {
+      if (next != null && next != _currentIndex) {
+        setState(() => _currentIndex = next);
+        // Reset the request
+        ref.read(requestedTabIndexProvider.notifier).state = null;
+      }
+    });
+
     return StarryBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,

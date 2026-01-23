@@ -1,0 +1,77 @@
+{
+  "guides": [
+    {
+      "id": "calm_2min",
+      "title": "Calm down in 2 minutes",
+      "shortSteps": [
+        "Dim the lights and reduce stimulation.",
+        "Hold with firm support and head supported.",
+        "Gentle rocking + quiet 'shhh'.",
+        "When calm, lay back down gently."
+      ],
+      "safetyNote": "If you're feeling sleepy, put the baby in a safe place.",
+      "estimatedSeconds": 120
+    },
+    {
+      "id": "difficult_night",
+      "title": "Difficult night: keep low stimulation",
+      "shortSteps": [
+        "Speak little and slowly.",
+        "No playing, no bright lights, no screens.",
+        "Do what's needed (feed/change) and lay back down.",
+        "If crying, use a simple and consistent routine."
+      ],
+      "safetyNote": "If you're feeling sleepy, put the baby in a safe place.",
+      "estimatedSeconds": 90
+    },
+    {
+      "id": "breathing_60s",
+      "title": "60s breathing for parents",
+      "shortSteps": [
+        "Inhale for 4 seconds.",
+        "Exhale for 6 seconds.",
+        "Shoulders down, jaw relaxed.",
+        "Repeat 6 times. Only the next minute matters."
+      ],
+      "safetyNote": "If you're feeling sleepy, put the baby in a safe place.",
+      "estimatedSeconds": 60
+    },
+    {
+      "id": "crib_transfer",
+      "title": "Transfer to the crib",
+      "shortSteps": [
+        "Bring the baby close to the mattress slowly.",
+        "Firm hands: one on the torso, one supporting the head.",
+        "Touch the torso first, then the head.",
+        "Keep your hand there 10–20s, then slowly remove."
+      ],
+      "safetyNote": "If you're feeling sleepy, put the baby in a safe place.",
+      "estimatedSeconds": 60
+    }
+  ],
+  "nightMode": {
+    "bullets": [
+      "Low light and calm voices.",
+      "No playtime — it's night.",
+      "After feeding/changing, lay back down.",
+      "If needed, pick up calmly and put back in crib when calmer.",
+      "If you're exhausted, ask for help. Safety first."
+    ]
+  },
+  "safetyChecklist": {
+    "title": "Safe sleep checklist (10s)",
+    "items": [
+      "Place on back (always).",
+      "Firm and flat surface (certified crib/bassinet).",
+      "Avoid inclined surfaces for sleeping.",
+      "Clear crib: no pillows, loose blankets, 'nests', positioners or toys.",
+      "Same room, separate bed (share room, not bed).",
+      "Avoid overheating: light clothing, comfortable temperature."
+    ],
+    "warning": "Avoid falling asleep with the baby on the sofa/armchair — this is one of the highest risk scenarios.",
+    "sources": "Sources: AAP/CDC/NHS."
+  },
+  "volumeSafetyMessage": "Low volume and device away from the crib.",
+  "volumeHighWarning": "If the indicator is in the high zone, consider lowering the volume.",
+  "disclaimer": "This is practical and safe support. It doesn't guarantee sleep. If you have medical concerns, talk to a professional."
+}

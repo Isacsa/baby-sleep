@@ -293,9 +293,9 @@ class _FilterBarDelegate extends SliverPersistentHeaderDelegate {
   });
 
   @override
-  double get minExtent => 100;
+  double get minExtent => 110;
   @override
-  double get maxExtent => 100;
+  double get maxExtent => 110;
 
   @override
   Widget build(
@@ -306,111 +306,99 @@ class _FilterBarDelegate extends SliverPersistentHeaderDelegate {
       color: NightTheme.backgroundBase,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.end,
         children: [
-          // Period chips
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
+          // Period Selector - Segmented Style
+          Container(
+            height: 40,
+            decoration: BoxDecoration(
+              color: NightTheme.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: NightTheme.textSecondary.withValues(alpha: 0.1),
+              ),
+            ),
+            padding: const EdgeInsets.all(4),
             child: Row(
               children: [
-                _FilterChip(
-                  label: l10n.statsPeriodDay,
-                  isSelected: filter.period == StatsPeriod.day,
-                  onTap: () => onPeriodChanged(StatsPeriod.day),
+                Expanded(
+                  child: _SegmentedTab(
+                    label: l10n.statsPeriodDay,
+                    isSelected: filter.period == StatsPeriod.day,
+                    onTap: () => onPeriodChanged(StatsPeriod.day),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: l10n.statsWeek,
-                  isSelected: filter.period == StatsPeriod.week,
-                  onTap: () => onPeriodChanged(StatsPeriod.week),
+                Expanded(
+                  child: _SegmentedTab(
+                    label: l10n.statsWeek,
+                    isSelected: filter.period == StatsPeriod.week,
+                    onTap: () => onPeriodChanged(StatsPeriod.week),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: l10n.statsPeriod14Days,
-                  isSelected: filter.period == StatsPeriod.fourteenDays,
-                  onTap: () => onPeriodChanged(StatsPeriod.fourteenDays),
+                Expanded(
+                  child: _SegmentedTab(
+                    label: l10n.statsPeriod14Days,
+                    isSelected: filter.period == StatsPeriod.fourteenDays,
+                    onTap: () => onPeriodChanged(StatsPeriod.fourteenDays),
+                  ),
                 ),
-                const SizedBox(width: 8),
-                _FilterChip(
-                  label: l10n.statsMonth,
-                  isSelected: filter.period == StatsPeriod.month,
-                  onTap: () => onPeriodChanged(StatsPeriod.month),
+                Expanded(
+                  child: _SegmentedTab(
+                    label: l10n.statsMonth,
+                    isSelected: filter.period == StatsPeriod.month,
+                    onTap: () => onPeriodChanged(StatsPeriod.month),
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 8),
-          // Type chips + Compare + Export
+          const SizedBox(height: 12),
+          // Row 2: Sleep Types & Actions
           Row(
             children: [
-              _FilterChip(
-                label: l10n.statsTypeAll,
-                isSelected: filter.sleepType == SleepTypeFilter.all,
-                onTap: () => onSleepTypeChanged(SleepTypeFilter.all),
-                small: true,
-              ),
-              const SizedBox(width: 6),
-              _FilterChip(
-                label: l10n.statsTypeNight,
-                isSelected: filter.sleepType == SleepTypeFilter.night,
-                onTap: () => onSleepTypeChanged(SleepTypeFilter.night),
-                small: true,
-              ),
-              const SizedBox(width: 6),
-              _FilterChip(
-                label: l10n.statsTypeNaps,
-                isSelected: filter.sleepType == SleepTypeFilter.naps,
-                onTap: () => onSleepTypeChanged(SleepTypeFilter.naps),
-                small: true,
-              ),
-              const Spacer(),
-              if (filter.canCompare)
-                GestureDetector(
-                  onTap: onCompareToggled,
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
                   child: Row(
                     children: [
-                      Icon(
-                        filter.compareEnabled
-                            ? Icons.check_box
-                            : Icons.check_box_outline_blank,
-                        size: 18,
-                        color: filter.compareEnabled
-                            ? NightTheme.primary
-                            : NightTheme.textSecondary,
+                      _FilterPill(
+                        label: l10n.statsTypeAll,
+                        isSelected: filter.sleepType == SleepTypeFilter.all,
+                        onTap: () => onSleepTypeChanged(SleepTypeFilter.all),
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        l10n.statsCompare,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: filter.compareEnabled
-                              ? NightTheme.primary
-                              : NightTheme.textSecondary,
-                        ),
+                      const SizedBox(width: 8),
+                      _FilterPill(
+                        label: l10n.statsTypeNight,
+                        isSelected: filter.sleepType == SleepTypeFilter.night,
+                        onTap: () => onSleepTypeChanged(SleepTypeFilter.night),
+                      ),
+                      const SizedBox(width: 8),
+                      _FilterPill(
+                        label: l10n.statsTypeNaps,
+                        isSelected: filter.sleepType == SleepTypeFilter.naps,
+                        onTap: () => onSleepTypeChanged(SleepTypeFilter.naps),
                       ),
                     ],
                   ),
                 ),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: onExportTap,
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.ios_share,
-                      size: 18,
-                      color: NightTheme.textSecondary,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      l10n.statsExport,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: NightTheme.textSecondary,
-                      ),
-                    ),
-                  ],
+              ),
+              const SizedBox(width: 8),
+              if (filter.canCompare) ...[
+                _ActionIcon(
+                  icon: filter.compareEnabled
+                      ? Icons.check_box_outlined
+                      : Icons.check_box_outline_blank,
+                  label: l10n.statsCompare,
+                  isActive: filter.compareEnabled,
+                  onTap: onCompareToggled,
                 ),
+                const SizedBox(width: 12),
+              ],
+              _ActionIcon(
+                icon: Icons.ios_share,
+                label: l10n.statsExport,
+                isActive: false,
+                onTap: onExportTap,
               ),
             ],
           ),
@@ -422,6 +410,124 @@ class _FilterBarDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant _FilterBarDelegate oldDelegate) =>
       filter != oldDelegate.filter;
+}
+
+class _SegmentedTab extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _SegmentedTab({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? NightTheme.primary.withValues(alpha: 0.2)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+            color: isSelected ? NightTheme.primary : NightTheme.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FilterPill extends StatelessWidget {
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _FilterPill({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? NightTheme.primary.withValues(alpha: 0.2)
+              : NightTheme.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected
+                ? NightTheme.primary.withValues(alpha: 0.5)
+                : Colors.transparent,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+            color: isSelected ? NightTheme.primary : NightTheme.textSecondary,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionIcon extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+
+  const _ActionIcon({
+    required this.icon,
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isActive ? NightTheme.primary : NightTheme.textSecondary;
+    
+    return GestureDetector(
+      onTap: onTap,
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _FilterChip extends StatelessWidget {

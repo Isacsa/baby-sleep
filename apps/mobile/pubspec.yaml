@@ -67,6 +67,10 @@ dependencies:
   # PDF generation
   pdf: ^3.11.1
 
+  # Audio playback (Relaxamento)
+  just_audio: ^0.9.43
+  audio_session: ^0.1.25
+
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images
 
@@ -127,3 +131,8 @@ flutter:
     - assets/curated/guide/v1/
     - assets/curated/guide/v1/pt_PT/
     - assets/curated/guide/v1/en_US/
+    # Relax tab audio assets
+    - assets/curated/relax/v1/
+    - assets/curated/relax/v1/audio/
+    - assets/curated/relax/v1/pt_PT/
+    - assets/curated/relax/v1/en_US/

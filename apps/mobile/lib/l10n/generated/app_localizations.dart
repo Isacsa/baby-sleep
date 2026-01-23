@@ -692,6 +692,300 @@ abstract class AppLocalizations {
   /// **'Coming soon'**
   String get relaxComingSoon;
 
+  /// No description provided for @relaxModeNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Now Mode'**
+  String get relaxModeNow;
+
+  /// No description provided for @relaxNightMode.
+  ///
+  /// In en, this message translates to:
+  /// **'Night mode'**
+  String get relaxNightMode;
+
+  /// No description provided for @relaxNightModeBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Night'**
+  String get relaxNightModeBadge;
+
+  /// No description provided for @relaxSounds.
+  ///
+  /// In en, this message translates to:
+  /// **'Sounds'**
+  String get relaxSounds;
+
+  /// No description provided for @relaxQuickGuides.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick guides'**
+  String get relaxQuickGuides;
+
+  /// No description provided for @relaxSleepShortcuts.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep shortcuts'**
+  String get relaxSleepShortcuts;
+
+  /// No description provided for @relaxSoundWhiteNoise.
+  ///
+  /// In en, this message translates to:
+  /// **'White Noise'**
+  String get relaxSoundWhiteNoise;
+
+  /// No description provided for @relaxSoundRain.
+  ///
+  /// In en, this message translates to:
+  /// **'Rain'**
+  String get relaxSoundRain;
+
+  /// No description provided for @relaxSoundFan.
+  ///
+  /// In en, this message translates to:
+  /// **'Fan'**
+  String get relaxSoundFan;
+
+  /// No description provided for @relaxSoundShush.
+  ///
+  /// In en, this message translates to:
+  /// **'Shushing'**
+  String get relaxSoundShush;
+
+  /// No description provided for @relaxPlay.
+  ///
+  /// In en, this message translates to:
+  /// **'Play'**
+  String get relaxPlay;
+
+  /// No description provided for @relaxPause.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get relaxPause;
+
+  /// No description provided for @relaxStop.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop'**
+  String get relaxStop;
+
+  /// No description provided for @relaxResume.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get relaxResume;
+
+  /// No description provided for @relaxVolume.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume'**
+  String get relaxVolume;
+
+  /// No description provided for @relaxVolumeLow.
+  ///
+  /// In en, this message translates to:
+  /// **'low'**
+  String get relaxVolumeLow;
+
+  /// No description provided for @relaxVolumeHigh.
+  ///
+  /// In en, this message translates to:
+  /// **'high'**
+  String get relaxVolumeHigh;
+
+  /// No description provided for @relaxVolumeHighWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'If the indicator is in the high zone, consider lowering the volume.'**
+  String get relaxVolumeHighWarning;
+
+  /// No description provided for @relaxVolumeSafetyTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Low volume and device away from the crib.'**
+  String get relaxVolumeSafetyTip;
+
+  /// No description provided for @relaxTimer.
+  ///
+  /// In en, this message translates to:
+  /// **'Timer'**
+  String get relaxTimer;
+
+  /// No description provided for @relaxTimerInfinite.
+  ///
+  /// In en, this message translates to:
+  /// **'∞'**
+  String get relaxTimerInfinite;
+
+  /// No description provided for @relaxTimerMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{minutes}min'**
+  String relaxTimerMinutes(int minutes);
+
+  /// No description provided for @relaxFadeOut.
+  ///
+  /// In en, this message translates to:
+  /// **'Fade-out'**
+  String get relaxFadeOut;
+
+  /// No description provided for @relaxFadeOutEnabled.
+  ///
+  /// In en, this message translates to:
+  /// **'enabled'**
+  String get relaxFadeOutEnabled;
+
+  /// No description provided for @relaxFadeOutDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'disabled'**
+  String get relaxFadeOutDisabled;
+
+  /// No description provided for @relaxDarkScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark screen'**
+  String get relaxDarkScreen;
+
+  /// No description provided for @relaxSaveConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Save configuration'**
+  String get relaxSaveConfig;
+
+  /// No description provided for @relaxFavorites.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites'**
+  String get relaxFavorites;
+
+  /// No description provided for @relaxNoFavorites.
+  ///
+  /// In en, this message translates to:
+  /// **'No favorites yet'**
+  String get relaxNoFavorites;
+
+  /// No description provided for @relaxFavoriteSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Configuration saved to favorites'**
+  String get relaxFavoriteSaved;
+
+  /// No description provided for @relaxFavoriteRemoved.
+  ///
+  /// In en, this message translates to:
+  /// **'Removed from favorites'**
+  String get relaxFavoriteRemoved;
+
+  /// No description provided for @relaxSafetyChecklist.
+  ///
+  /// In en, this message translates to:
+  /// **'Safe sleep checklist'**
+  String get relaxSafetyChecklist;
+
+  /// No description provided for @relaxSafetyChecklistShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Checklist (10s)'**
+  String get relaxSafetyChecklistShort;
+
+  /// No description provided for @relaxBreathing60s.
+  ///
+  /// In en, this message translates to:
+  /// **'Breathing 60s'**
+  String get relaxBreathing60s;
+
+  /// No description provided for @relaxGoToSleep.
+  ///
+  /// In en, this message translates to:
+  /// **'Go to Sleep'**
+  String get relaxGoToSleep;
+
+  /// No description provided for @relaxStartSleep.
+  ///
+  /// In en, this message translates to:
+  /// **'Start sleep'**
+  String get relaxStartSleep;
+
+  /// No description provided for @relaxEndSleep.
+  ///
+  /// In en, this message translates to:
+  /// **'End sleep'**
+  String get relaxEndSleep;
+
+  /// No description provided for @relaxSleepOngoing.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleep ongoing'**
+  String get relaxSleepOngoing;
+
+  /// No description provided for @relaxAwake.
+  ///
+  /// In en, this message translates to:
+  /// **'Awake'**
+  String get relaxAwake;
+
+  /// No description provided for @relaxAudioUnavailable.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio unavailable on this device. Continue using the guides below.'**
+  String get relaxAudioUnavailable;
+
+  /// No description provided for @relaxAudioError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not start audio.'**
+  String get relaxAudioError;
+
+  /// No description provided for @relaxTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Try again'**
+  String get relaxTryAgain;
+
+  /// No description provided for @relaxHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Help'**
+  String get relaxHelp;
+
+  /// No description provided for @relaxInterrupted.
+  ///
+  /// In en, this message translates to:
+  /// **'Playback interrupted'**
+  String get relaxInterrupted;
+
+  /// No description provided for @relaxBackgroundWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'In background, sound may stop on this device. Keep the app open to continue.'**
+  String get relaxBackgroundWarning;
+
+  /// No description provided for @relaxDisclaimer.
+  ///
+  /// In en, this message translates to:
+  /// **'This is practical and safe support. It doesn\'t guarantee sleep. If you have medical concerns, talk to a professional.'**
+  String get relaxDisclaimer;
+
+  /// No description provided for @relaxSofaWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Avoid falling asleep with the baby on the sofa/armchair — this is one of the highest risk scenarios.'**
+  String get relaxSofaWarning;
+
+  /// No description provided for @relaxSafetyNote.
+  ///
+  /// In en, this message translates to:
+  /// **'If you\'re feeling sleepy, put the baby in a safe place.'**
+  String get relaxSafetyNote;
+
+  /// No description provided for @relaxSources.
+  ///
+  /// In en, this message translates to:
+  /// **'Sources: AAP/CDC/NHS.'**
+  String get relaxSources;
+
   /// Babies page title
   ///
   /// In en, this message translates to:

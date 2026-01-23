@@ -1,0 +1,40 @@
+{
+  "version": "1.0.0",
+  "sounds": [
+    {
+      "id": "white_noise",
+      "nameKey": "relaxSoundWhiteNoise",
+      "icon": "waves",
+      "assetPath": "audio/white_noise.mp3",
+      "durationSeconds": 60,
+      "loopable": true
+    },
+    {
+      "id": "rain",
+      "nameKey": "relaxSoundRain",
+      "icon": "water_drop",
+      "assetPath": "audio/rain.mp3",
+      "durationSeconds": 60,
+      "loopable": true
+    },
+    {
+      "id": "fan",
+      "nameKey": "relaxSoundFan",
+      "icon": "air",
+      "assetPath": "audio/fan.mp3",
+      "durationSeconds": 60,
+      "loopable": true
+    },
+    {
+      "id": "shush",
+      "nameKey": "relaxSoundShush",
+      "icon": "record_voice_over",
+      "assetPath": "audio/shush.mp3",
+      "durationSeconds": 30,
+      "loopable": true
+    }
+  ],
+  "timerPresets": [15, 30, 60, -1],
+  "fadeOutDurationSeconds": 30,
+  "volumeSoftCapPercent": 70
+}

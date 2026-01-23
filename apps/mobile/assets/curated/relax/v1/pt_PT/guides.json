@@ -1,0 +1,77 @@
+{
+  "guides": [
+    {
+      "id": "calm_2min",
+      "title": "Acalmar em 2 minutos",
+      "shortSteps": [
+        "Baixa a luz e reduz estímulo.",
+        "Segura com apoio firme e cabeça apoiada.",
+        "Embalar suave + 'shhh' tranquilo.",
+        "Quando acalmar, volta a deitar."
+      ],
+      "safetyNote": "Se estiveres com sono, coloca o bebé num local seguro.",
+      "estimatedSeconds": 120
+    },
+    {
+      "id": "difficult_night",
+      "title": "Noite difícil: manter baixo estímulo",
+      "shortSteps": [
+        "Fala pouco e devagar.",
+        "Sem brincar, sem luz forte, sem ecrãs.",
+        "Faz o necessário (alimentar/mudar) e volta a deitar.",
+        "Se houver choro, rotina simples e consistente."
+      ],
+      "safetyNote": "Se estiveres com sono, coloca o bebé num local seguro.",
+      "estimatedSeconds": 90
+    },
+    {
+      "id": "breathing_60s",
+      "title": "Respiração 60s para pais",
+      "shortSteps": [
+        "Inspira 4 segundos.",
+        "Expira 6 segundos.",
+        "Ombros para baixo, maxilar solto.",
+        "Repete 6 vezes. Só o próximo minuto importa."
+      ],
+      "safetyNote": "Se estiveres com sono, coloca o bebé num local seguro.",
+      "estimatedSeconds": 60
+    },
+    {
+      "id": "crib_transfer",
+      "title": "Transferência para o berço",
+      "shortSteps": [
+        "Aproxima o bebé do colchão devagar.",
+        "Mãos firmes: uma no tronco, outra a apoiar a cabeça.",
+        "Encosta primeiro o tronco, depois a cabeça.",
+        "Mantém a mão 10–20s e depois retira lentamente."
+      ],
+      "safetyNote": "Se estiveres com sono, coloca o bebé num local seguro.",
+      "estimatedSeconds": 60
+    }
+  ],
+  "nightMode": {
+    "bullets": [
+      "Luz baixa e vozes calmas.",
+      "Sem brincadeiras — é noite.",
+      "Depois de alimentar/mudar, voltar a deitar.",
+      "Se precisares, pega ao colo com calma e volta a pôr no berço quando estiver mais sereno.",
+      "Se estiveres exausto(a), pede ajuda. Segurança primeiro."
+    ]
+  },
+  "safetyChecklist": {
+    "title": "Checklist de sono seguro (10s)",
+    "items": [
+      "Deitar de costas (sempre).",
+      "Superfície firme e plana (berço/next-to-me certificado).",
+      "Evitar superfícies inclinadas para dormir.",
+      "Berço livre: sem almofadas, cobertores soltos, 'ninhos', posicionadores ou brinquedos.",
+      "Mesmo quarto, cama separada (partilhar quarto, não a cama).",
+      "Evitar sobreaquecimento: roupa leve, temperatura confortável."
+    ],
+    "warning": "Evita adormecer com o bebé no sofá/cadeirão — é um dos cenários de maior risco.",
+    "sources": "Fontes: AAP/CDC/NHS."
+  },
+  "volumeSafetyMessage": "Volume baixo e dispositivo afastado do berço.",
+  "volumeHighWarning": "Se o indicador estiver na zona alta, considera baixar o volume.",
+  "disclaimer": "Isto é apoio prático e seguro. Não garante sono. Se tiveres preocupações médicas, fala com um profissional."
+}
