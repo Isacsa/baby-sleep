@@ -1205,4 +1205,153 @@ class AppLocalizationsPt extends AppLocalizations {
   @override
   String get guideDisclaimer =>
       'Este conteúdo é informativo e não substitui aconselhamento médico personalizado.';
+
+  @override
+  String get cockpitTodayLabel => 'Today';
+
+  @override
+  String cockpitRecommended(String range) {
+    return 'Recommended: $range';
+  }
+
+  @override
+  String cockpitReference(String range) {
+    return 'Reference: $range';
+  }
+
+  @override
+  String get cockpitAddDobForGoal => 'Add birth date for age-based goals';
+
+  @override
+  String get cockpitAddDob => 'Add DOB';
+
+  @override
+  String get cockpitNoDataYet => 'When you record sleep, progress shows here.';
+
+  @override
+  String get cockpitBuildingTrend => 'Building trend with more records.';
+
+  @override
+  String get cockpitApproachingReference => 'Approaching reference zone.';
+
+  @override
+  String get cockpitApproachingMin => 'Heading to recommended minimum.';
+
+  @override
+  String get cockpitWithinReference => 'Within reference.';
+
+  @override
+  String get cockpitWithinRange => 'Within recommended range.';
+
+  @override
+  String get cockpitDifferentToday => 'Today was different — look at the week.';
+
+  @override
+  String get cockpitUpdatingWhileSleeping => 'Updating while sleeping.';
+
+  @override
+  String get cockpitInProgress => 'In progress';
+
+  @override
+  String get predictionTitle => 'Likely next sleep';
+
+  @override
+  String get predictionCollecting =>
+      'Collecting pattern — record a few more sleeps.';
+
+  @override
+  String get predictionSleepingNow =>
+      'Sleeping now — prediction available after waking.';
+
+  @override
+  String get predictionDataQualityLow =>
+      'Review records to improve prediction.';
+
+  @override
+  String get predictionWindowPassed =>
+      'Window has passed — today was atypical.';
+
+  @override
+  String predictionConfidence(String level) {
+    return 'Confidence: $level';
+  }
+
+  @override
+  String predictionBasedOn(int count) {
+    return 'Based on last $count gaps between sleeps.';
+  }
+
+  @override
+  String get predictionRemindMe => 'Remind me';
+
+  @override
+  String get predictionRemindMeSoon => 'Coming soon';
+
+  @override
+  String get predictionHowWeCalculate => 'How we calculate';
+
+  @override
+  String get predictionExplainTitle => 'How prediction works';
+
+  @override
+  String get predictionExplain1 => 'We look at recent gaps between sleeps.';
+
+  @override
+  String get predictionExplain2 =>
+      'We use the median to reduce impact of atypical days.';
+
+  @override
+  String get predictionExplain3 =>
+      'The window widens when there\'s more variability.';
+
+  @override
+  String get predictionDataPartial => 'Data: Partial';
+
+  @override
+  String get predictionDataIncomplete => 'Data: Incomplete';
+
+  @override
+  String get predictionSeeDetails => 'See details';
+
+  @override
+  String get dataQualityTitle => 'Data quality';
+
+  @override
+  String get dataQualityGood => 'Good';
+
+  @override
+  String get dataQualityPartial => 'Partial';
+
+  @override
+  String get dataQualityIncomplete => 'Incomplete';
+
+  @override
+  String get dataQualityWarning => 'Prediction may be less accurate today.';
+
+  @override
+  String get dataQualitySeeDetails => 'See details';
+
+  @override
+  String get timelineTitle => 'Today';
+
+  @override
+  String get timelineSeeAll => 'See all';
+
+  @override
+  String get timelineSeeMore => 'See more';
+
+  @override
+  String get timelineNoRecords => 'No records today yet';
+
+  @override
+  String get timelineAddManual => 'Add manual';
+
+  @override
+  String get quickActionsAddManual => 'Add manual';
+
+  @override
+  String get quickActionsEditLast => 'Edit last';
+
+  @override
+  String get quickActionsViewDay => 'View day';
 }

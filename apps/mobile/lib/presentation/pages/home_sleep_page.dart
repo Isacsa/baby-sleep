@@ -6,6 +6,7 @@ import 'package:temp_flutter/application/providers/sleep_state_provider.dart';
 import 'package:temp_flutter/application/providers/sleep_events_provider.dart';
 import 'package:temp_flutter/application/providers/sync_provider.dart';
 import 'package:temp_flutter/application/providers/caregiver_context_provider.dart';
+import 'package:temp_flutter/application/providers/sleep_cockpit_provider.dart';
 import 'package:temp_flutter/core/l10n/l10n.dart';
 import 'package:temp_flutter/core/utils/local_time_utils.dart';
 import 'package:temp_flutter/domain/entities/baby.dart';
@@ -14,6 +15,8 @@ import 'package:temp_flutter/domain/value_objects/sleep_session.dart';
 import 'package:temp_flutter/presentation/theme/night_theme.dart';
 import 'package:temp_flutter/presentation/widgets/sync_status_chip.dart';
 import 'package:temp_flutter/presentation/widgets/quick_time_chip.dart';
+import 'package:temp_flutter/presentation/widgets/sleep_cockpit_hero.dart';
+import 'package:temp_flutter/presentation/widgets/data_quality_indicator.dart';
 // HomeSleepPage must stay minimal: only sleep logging UI (Start/End + quick chips).
 
 /// HomeSleepPage - Tab principal de Sono
@@ -148,12 +151,12 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
           // Header
           _buildHeader(activeBaby.name, syncState),
           
-          // Main content
+          // Main content - now scrollable with cockpit
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 120),
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // Caregiver context status
                   // GUARDRAIL 1: Show loading banner for both Loading and Initial states
@@ -162,34 +165,47 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
                   else if (contextMessage != null)
                     _buildErrorBanner(contextMessage),
 
-                  const Spacer(),
-                  
-                  // Primary Sleep Button
-                  _PrimarySleepButton(
-                    isSleeping: sleepState.isSleeping,
-                    lastEventTimestamp: sleepState.lastEventTimestamp,
-                    isLoading: isLoading,
-                    isDisabled: !canCreateEvents,
-                    onPressed: canCreateEvents ? _handleSleepAction : null,
+                  // A. Hero Top (new cockpit section)
+                  SleepCockpitHero(
+                    onAddDob: () => Navigator.of(context).pushNamed('/baby-profile'),
+                    onSeeDataQualityDetails: () => _showDataQualityDetails(),
                   ),
                   
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 16),
                   
-                  // Quick time chips - different based on sleep state
+                  // B. CTA Registo (Primary Sleep Button)
+                  Center(
+                    child: _PrimarySleepButton(
+                      isSleeping: sleepState.isSleeping,
+                      lastEventTimestamp: sleepState.lastEventTimestamp,
+                      isLoading: isLoading,
+                      isDisabled: !canCreateEvents,
+                      onPressed: canCreateEvents ? _handleSleepAction : null,
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 24),
+                  
+                  // C. Quick actions
                   if (canCreateEvents)
                     if (!sleepState.isSleeping)
                       _buildQuickTimeChips() // AWAKE: 5/10/15 min + Outra hora
                     else
                       _buildRetroactiveOnlyChip(), // SLEEPING: apenas "Outra hora (sono anterior)"
                   
-                  const Spacer(),
+                  const SizedBox(height: 16),
+                  
+                  // D. Timeline (compact - link to day detail)
+                  _buildTimelineSection(),
+                  
+                  const SizedBox(height: 16),
+                  
+                  // E. Data Quality Indicator (if not good)
+                  _buildDataQualitySection(),
                 ],
               ),
             ),
           ),
-          
-          // Bottom padding for floating bar
-          const SizedBox(height: 100),
         ],
       ),
     );
@@ -433,6 +449,213 @@ class _HomeSleepPageState extends ConsumerState<HomeSleepPage> {
           onTap: _handleCustomTimeWhileSleeping,
         ),
       ],
+    );
+  }
+
+  /// Compact timeline section - shows today's sessions with link to full day
+  Widget _buildTimelineSection() {
+    final cockpit = ref.watch(sleepCockpitProvider);
+    final sessions = cockpit.todaySessions;
+    final l10n = context.l10n;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: NightTheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: NightTheme.textSecondary.withValues(alpha: 0.1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header row
+          Row(
+            children: [
+              Text(
+                l10n.timelineTitle,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: NightTheme.textPrimary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                cockpit.goal.totalFormatted,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: NightTheme.textSecondary,
+                ),
+              ),
+              const Spacer(),
+              TextButton(
+                onPressed: () => Navigator.of(context).pushNamed('/day-detail'),
+                child: Text(
+                  l10n.timelineSeeAll,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: NightTheme.primary,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          // Sessions preview (max 3)
+          if (sessions.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                l10n.timelineNoRecords,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: NightTheme.textSecondary,
+                ),
+              ),
+            )
+          else
+            Stack(
+              children: [
+                // Connector line
+                Positioned(
+                  left: 7, // Center of icon (16px) is at 8px, line width 2px -> left at 7px
+                  top: 12,
+                  bottom: 12,
+                  child: Container(
+                    width: 2,
+                    decoration: BoxDecoration(
+                      color: NightTheme.textSecondary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                  ),
+                ),
+                // Sessions list
+                Column(
+                  children: sessions.take(3).map((session) => _buildSessionPreview(session)).toList(),
+                ),
+              ],
+            ),
+
+          // "See more" if > 3
+          if (sessions.length > 3)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: GestureDetector(
+                onTap: () => Navigator.of(context).pushNamed('/day-detail'),
+                child: Text(
+                  '${l10n.timelineSeeMore} (${sessions.length - 3})',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: NightTheme.primary,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSessionPreview(SleepSession session) {
+    final startLocal = session.startEvent.timestamp.toLocal();
+    final startStr = '${startLocal.hour.toString().padLeft(2, '0')}:${startLocal.minute.toString().padLeft(2, '0')}';
+    
+    String endStr;
+    if (session.isComplete) {
+      final endLocal = session.endEvent!.timestamp.toLocal();
+      endStr = '${endLocal.hour.toString().padLeft(2, '0')}:${endLocal.minute.toString().padLeft(2, '0')}';
+    } else {
+      endStr = context.l10n.sessionInProgress;
+    }
+
+    final durationStr = session.isComplete
+        ? _formatDuration(session.duration!)
+        : '';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8), // Increased spacing
+      child: Row(
+        children: [
+          // Icon with background circle to cover the line
+          Container(
+            decoration: BoxDecoration(
+              color: NightTheme.surface, // Matches background to "cut" the line
+              shape: BoxShape.circle,
+            ),
+            padding: const EdgeInsets.all(2), // Small padding around icon
+            child: Icon(
+              session.isComplete ? Icons.brightness_3 : Icons.bedtime,
+              size: 14,
+              color: session.isComplete ? NightTheme.textSecondary : NightTheme.primary,
+            ),
+          ),
+          const SizedBox(width: 12), // Increased spacing
+          Text(
+            '$startStr – $endStr',
+            style: const TextStyle(
+              fontSize: 13,
+              color: NightTheme.textPrimary,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          if (durationStr.isNotEmpty) ...[
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: NightTheme.backgroundBase,
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                durationStr,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: NightTheme.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    final h = duration.inHours;
+    final m = duration.inMinutes % 60;
+    if (h == 0) return '${m}m';
+    if (m == 0) return '${h}h';
+    return '${h}h ${m}m';
+  }
+
+  /// Data quality section - only shown if not good
+  Widget _buildDataQualitySection() {
+    final cockpit = ref.watch(sleepCockpitProvider);
+
+    // Only show if there are issues
+    if (cockpit.isDataQualityGood) {
+      return const SizedBox.shrink();
+    }
+
+    return DataQualityIndicator(
+      viewModel: cockpit.dataQualityViewModel,
+      onSeeDetails: _showDataQualityDetails,
+    );
+  }
+
+  /// Shows the data quality details bottom sheet
+  void _showDataQualityDetails() {
+    final cockpit = ref.read(sleepCockpitProvider);
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => DataQualityDetailsSheet(
+        viewModel: cockpit.dataQualityViewModel,
+      ),
     );
   }
 

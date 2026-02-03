@@ -2239,6 +2239,276 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This content is informational and does not replace personalized medical advice.'**
   String get guideDisclaimer;
+
+  /// No description provided for @cockpitTodayLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get cockpitTodayLabel;
+
+  /// No description provided for @cockpitRecommended.
+  ///
+  /// In en, this message translates to:
+  /// **'Recommended: {range}'**
+  String cockpitRecommended(String range);
+
+  /// No description provided for @cockpitReference.
+  ///
+  /// In en, this message translates to:
+  /// **'Reference: {range}'**
+  String cockpitReference(String range);
+
+  /// No description provided for @cockpitAddDobForGoal.
+  ///
+  /// In en, this message translates to:
+  /// **'Add birth date for age-based goals'**
+  String get cockpitAddDobForGoal;
+
+  /// No description provided for @cockpitAddDob.
+  ///
+  /// In en, this message translates to:
+  /// **'Add DOB'**
+  String get cockpitAddDob;
+
+  /// No description provided for @cockpitNoDataYet.
+  ///
+  /// In en, this message translates to:
+  /// **'When you record sleep, progress shows here.'**
+  String get cockpitNoDataYet;
+
+  /// No description provided for @cockpitBuildingTrend.
+  ///
+  /// In en, this message translates to:
+  /// **'Building trend with more records.'**
+  String get cockpitBuildingTrend;
+
+  /// No description provided for @cockpitApproachingReference.
+  ///
+  /// In en, this message translates to:
+  /// **'Approaching reference zone.'**
+  String get cockpitApproachingReference;
+
+  /// No description provided for @cockpitApproachingMin.
+  ///
+  /// In en, this message translates to:
+  /// **'Heading to recommended minimum.'**
+  String get cockpitApproachingMin;
+
+  /// No description provided for @cockpitWithinReference.
+  ///
+  /// In en, this message translates to:
+  /// **'Within reference.'**
+  String get cockpitWithinReference;
+
+  /// No description provided for @cockpitWithinRange.
+  ///
+  /// In en, this message translates to:
+  /// **'Within recommended range.'**
+  String get cockpitWithinRange;
+
+  /// No description provided for @cockpitDifferentToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Today was different — look at the week.'**
+  String get cockpitDifferentToday;
+
+  /// No description provided for @cockpitUpdatingWhileSleeping.
+  ///
+  /// In en, this message translates to:
+  /// **'Updating while sleeping.'**
+  String get cockpitUpdatingWhileSleeping;
+
+  /// No description provided for @cockpitInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'In progress'**
+  String get cockpitInProgress;
+
+  /// No description provided for @predictionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Likely next sleep'**
+  String get predictionTitle;
+
+  /// No description provided for @predictionCollecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Collecting pattern — record a few more sleeps.'**
+  String get predictionCollecting;
+
+  /// No description provided for @predictionSleepingNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Sleeping now — prediction available after waking.'**
+  String get predictionSleepingNow;
+
+  /// No description provided for @predictionDataQualityLow.
+  ///
+  /// In en, this message translates to:
+  /// **'Review records to improve prediction.'**
+  String get predictionDataQualityLow;
+
+  /// No description provided for @predictionWindowPassed.
+  ///
+  /// In en, this message translates to:
+  /// **'Window has passed — today was atypical.'**
+  String get predictionWindowPassed;
+
+  /// No description provided for @predictionConfidence.
+  ///
+  /// In en, this message translates to:
+  /// **'Confidence: {level}'**
+  String predictionConfidence(String level);
+
+  /// No description provided for @predictionBasedOn.
+  ///
+  /// In en, this message translates to:
+  /// **'Based on last {count} gaps between sleeps.'**
+  String predictionBasedOn(int count);
+
+  /// No description provided for @predictionRemindMe.
+  ///
+  /// In en, this message translates to:
+  /// **'Remind me'**
+  String get predictionRemindMe;
+
+  /// No description provided for @predictionRemindMeSoon.
+  ///
+  /// In en, this message translates to:
+  /// **'Coming soon'**
+  String get predictionRemindMeSoon;
+
+  /// No description provided for @predictionHowWeCalculate.
+  ///
+  /// In en, this message translates to:
+  /// **'How we calculate'**
+  String get predictionHowWeCalculate;
+
+  /// No description provided for @predictionExplainTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'How prediction works'**
+  String get predictionExplainTitle;
+
+  /// No description provided for @predictionExplain1.
+  ///
+  /// In en, this message translates to:
+  /// **'We look at recent gaps between sleeps.'**
+  String get predictionExplain1;
+
+  /// No description provided for @predictionExplain2.
+  ///
+  /// In en, this message translates to:
+  /// **'We use the median to reduce impact of atypical days.'**
+  String get predictionExplain2;
+
+  /// No description provided for @predictionExplain3.
+  ///
+  /// In en, this message translates to:
+  /// **'The window widens when there\'s more variability.'**
+  String get predictionExplain3;
+
+  /// No description provided for @predictionDataPartial.
+  ///
+  /// In en, this message translates to:
+  /// **'Data: Partial'**
+  String get predictionDataPartial;
+
+  /// No description provided for @predictionDataIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Data: Incomplete'**
+  String get predictionDataIncomplete;
+
+  /// No description provided for @predictionSeeDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'See details'**
+  String get predictionSeeDetails;
+
+  /// No description provided for @dataQualityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Data quality'**
+  String get dataQualityTitle;
+
+  /// No description provided for @dataQualityGood.
+  ///
+  /// In en, this message translates to:
+  /// **'Good'**
+  String get dataQualityGood;
+
+  /// No description provided for @dataQualityPartial.
+  ///
+  /// In en, this message translates to:
+  /// **'Partial'**
+  String get dataQualityPartial;
+
+  /// No description provided for @dataQualityIncomplete.
+  ///
+  /// In en, this message translates to:
+  /// **'Incomplete'**
+  String get dataQualityIncomplete;
+
+  /// No description provided for @dataQualityWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Prediction may be less accurate today.'**
+  String get dataQualityWarning;
+
+  /// No description provided for @dataQualitySeeDetails.
+  ///
+  /// In en, this message translates to:
+  /// **'See details'**
+  String get dataQualitySeeDetails;
+
+  /// No description provided for @timelineTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get timelineTitle;
+
+  /// No description provided for @timelineSeeAll.
+  ///
+  /// In en, this message translates to:
+  /// **'See all'**
+  String get timelineSeeAll;
+
+  /// No description provided for @timelineSeeMore.
+  ///
+  /// In en, this message translates to:
+  /// **'See more'**
+  String get timelineSeeMore;
+
+  /// No description provided for @timelineNoRecords.
+  ///
+  /// In en, this message translates to:
+  /// **'No records today yet'**
+  String get timelineNoRecords;
+
+  /// No description provided for @timelineAddManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Add manual'**
+  String get timelineAddManual;
+
+  /// No description provided for @quickActionsAddManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Add manual'**
+  String get quickActionsAddManual;
+
+  /// No description provided for @quickActionsEditLast.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit last'**
+  String get quickActionsEditLast;
+
+  /// No description provided for @quickActionsViewDay.
+  ///
+  /// In en, this message translates to:
+  /// **'View day'**
+  String get quickActionsViewDay;
 }
 
 class _AppLocalizationsDelegate

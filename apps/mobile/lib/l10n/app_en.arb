@@ -998,5 +998,67 @@
 
   "guideOpenSection": "Open",
   "guideBackToList": "Back",
-  "guideDisclaimer": "This content is informational and does not replace personalized medical advice."
+  "guideDisclaimer": "This content is informational and does not replace personalized medical advice.",
+
+  "cockpitTodayLabel": "Today",
+  "cockpitRecommended": "Recommended: {range}",
+  "@cockpitRecommended": {
+    "placeholders": { "range": { "type": "String" } }
+  },
+  "cockpitReference": "Reference: {range}",
+  "@cockpitReference": {
+    "placeholders": { "range": { "type": "String" } }
+  },
+  "cockpitAddDobForGoal": "Add birth date for age-based goals",
+  "cockpitAddDob": "Add DOB",
+  "cockpitNoDataYet": "When you record sleep, progress shows here.",
+  "cockpitBuildingTrend": "Building trend with more records.",
+  "cockpitApproachingReference": "Approaching reference zone.",
+  "cockpitApproachingMin": "Heading to recommended minimum.",
+  "cockpitWithinReference": "Within reference.",
+  "cockpitWithinRange": "Within recommended range.",
+  "cockpitDifferentToday": "Today was different — look at the week.",
+  "cockpitUpdatingWhileSleeping": "Updating while sleeping.",
+  "cockpitInProgress": "In progress",
+
+  "predictionTitle": "Likely next sleep",
+  "predictionCollecting": "Collecting pattern — record a few more sleeps.",
+  "predictionSleepingNow": "Sleeping now — prediction available after waking.",
+  "predictionDataQualityLow": "Review records to improve prediction.",
+  "predictionWindowPassed": "Window has passed — today was atypical.",
+  "predictionConfidence": "Confidence: {level}",
+  "@predictionConfidence": {
+    "placeholders": { "level": { "type": "String" } }
+  },
+  "predictionBasedOn": "Based on last {count} gaps between sleeps.",
+  "@predictionBasedOn": {
+    "placeholders": { "count": { "type": "int" } }
+  },
+  "predictionRemindMe": "Remind me",
+  "predictionRemindMeSoon": "Coming soon",
+  "predictionHowWeCalculate": "How we calculate",
+  "predictionExplainTitle": "How prediction works",
+  "predictionExplain1": "We look at recent gaps between sleeps.",
+  "predictionExplain2": "We use the median to reduce impact of atypical days.",
+  "predictionExplain3": "The window widens when there's more variability.",
+  "predictionDataPartial": "Data: Partial",
+  "predictionDataIncomplete": "Data: Incomplete",
+  "predictionSeeDetails": "See details",
+
+  "dataQualityTitle": "Data quality",
+  "dataQualityGood": "Good",
+  "dataQualityPartial": "Partial",
+  "dataQualityIncomplete": "Incomplete",
+  "dataQualityWarning": "Prediction may be less accurate today.",
+  "dataQualitySeeDetails": "See details",
+
+  "timelineTitle": "Today",
+  "timelineSeeAll": "See all",
+  "timelineSeeMore": "See more",
+  "timelineNoRecords": "No records today yet",
+  "timelineAddManual": "Add manual",
+
+  "quickActionsAddManual": "Add manual",
+  "quickActionsEditLast": "Edit last",
+  "quickActionsViewDay": "View day"
 }
